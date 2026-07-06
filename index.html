@@ -4,34 +4,53 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Portfolio</title>
-  <link rel="stylesheet" href="https://unpkg.com/fullpage.js@3.1.2/dist/fullpage.min.css">
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet" />
   <style>
-    body { margin: 0; font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif; background: #fff; color: #fff; overflow: hidden; height: 100vh; }
-    .section { text-align: center; padding: 0rem 1rem; }
-    .about-image img { width: 100%; height: 100%; object-fit: cover; }
-    .mac-container { margin: 0 auto; background: #f5f5f5; border-radius: 20px; width: 90%; height: 90vh; overflow: hidden; position: relative; display: flex; flex-direction: column; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1); /* 부드러운 그림자 */}
-    .mac-titlebar { height: 36px; background: #e0e0e0; display: flex; align-items: center; padding: 0 10px; }
-    .mac-buttons { display: flex; gap: 6px; }
-    .mac-buttons div, .window-buttons div { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; }
-    .close { background: #ff5f56; }
-    .minimize { background: #ffbd2e; }
-    .maximize { background: #27c93f; }
-    .mac-body { position: relative; width: 100%; height: 100%; padding: 3rem 4rem; box-sizing: border-box; }
-    .folder { position: absolute; text-align: center; cursor: grab; user-select: none; }
-    .folder img {filter: drop-shadow(0px 4px 4px #c3c3c3); width: 130px; }
-    .folder .label { color: #000; font-size: 0.9rem; margin-top: 0.5rem; }
-    .tab-bar { display: flex; gap: 6px; margin-left: 20px; }
-    .tab { background: #ccc;  /* 기존보다 밝은 회색 */padding: 5px 10px; border-radius: 4px 4px 0 0; cursor: pointer; color: #333; font-size: 0.85rem; display: flex; align-items: center; gap: 4px;}
+    :root {
+      --bg-light: #fafafa;
+      --bg-dark: #111214;
+      --fg-dark: #1a1a1a;
+      --fg-muted: #767676;
+      --accent: #5a3eff;
+      --border: #e4e4e4;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+    }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif; background: var(--bg-light); color: var(--fg-dark); }
 
-    .tab.active { background: #fff; font-weight: bold; color: #000; }
-    .tab .close-btn { font-weight: bold; cursor: pointer; }
-    iframe.content-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; display: none; z-index: 10; background: #fff; }
-    #fp-nav ul li a span, .fp-slidesNav ul li a span { background: #fff; }
-    .fp-watermark { display: none !important; } /* fullPage.js 하단 워터마크 제거 */
+    .scroll-container {
+      height: 100vh;
+      overflow-y: scroll;
+      scroll-snap-type: y mandatory;
+      scroll-behavior: smooth;
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .scroll-container::-webkit-scrollbar { display: none; }
+
+    .section {
+      text-align: center;
+      padding: 0 1rem;
+      height: 100vh;
+      box-sizing: border-box;
+      scroll-snap-align: start;
+      scroll-snap-stop: always;
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .section.in-view { opacity: 1; transform: translateY(0); }
+    .section#home, .section#about { transition: opacity 1s ease, transform 1s ease; }
+
+    .dots { position: fixed; right: 2rem; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 14px; z-index: 50; }
+    .dots button { width: 8px; height: 8px; padding: 0; border-radius: 50%; border: 1.5px solid var(--fg-muted); background: transparent; cursor: pointer; transition: background 0.25s ease, border-color 0.25s ease, transform 0.25s ease; }
+    .dots button.active { background: var(--fg-dark); border-color: var(--fg-dark); transform: scale(1.3); }
+    .dots.on-dark button { border-color: rgba(255, 255, 255, 0.5); }
+    .dots.on-dark button.active { background: #fff; border-color: #fff; }
+
     @keyframes fadeUp { 0% { opacity: 0; transform: translateY(40px); } 100% { opacity: 1; transform: translateY(0); } }
     .fade-up { opacity: 0; animation: fadeUp 1s ease-out forwards; animation-delay: 0.3s; }
-    .fp-table { flex-direction: row; display: block; }
+
     @font-face {
       font-family: 'Heading Pro Trial';
       src: url('HeadingProTrial-Book.woff2') format('woff2'),
@@ -48,88 +67,70 @@
       font-style: normal;
       font-display: swap;
     }
-.section {
-  opacity: 0;
-  transform: translateY(30px);
-  transition: opacity 0.6s ease, transform 0.6s ease;
-}
 
-.section.active {
-  opacity: 1;
-  transform: translateY(0);
-}
+    .section#about {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(circle at center, rgba(0,0,0,0) 80%, rgba(0,0,0,0.5) 130%);
+      z-index: 1;
+    }
+    .about-image { display: flex; justify-content: center; align-items: center; width: 100%; }
+    .about-image img { height: auto; width: 100%; max-width: 900px; object-fit: contain; }
 
-.section#home,
-.section#about {
-  transition: opacity 1s ease, transform 1s ease; /* 더 강한 효과 */
-}
-.section#about {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  height: 100vh; /* 섹션 전체를 기준으로 중앙 */
-  background: radial-gradient(circle at center, rgba(0,0,0,0) 80%, rgba(0,0,0,0.5) 130%);
-  z-index: 1;
-}
+    .mac-container { margin: 0 auto; background: var(--bg-light); border: 1px solid var(--border); border-radius: 20px; width: 90%; height: 90vh; overflow: hidden; position: relative; display: flex; flex-direction: column; box-shadow: var(--shadow); }
+    .mac-titlebar { height: 36px; background: #efefef; display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid var(--border); }
+    .mac-buttons { display: flex; gap: 6px; }
+    .mac-buttons div, .window-buttons div { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; }
+    .close { background: #ff5f56; }
+    .minimize { background: #ffbd2e; }
+    .maximize { background: #27c93f; }
+    .mac-body { position: relative; width: 100%; height: 100%; padding: 3rem 4rem; box-sizing: border-box; }
+    .folder { position: absolute; text-align: center; cursor: grab; user-select: none; }
+    .folder img { width: 130px; filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.12)); transition: transform 0.25s ease, filter 0.25s ease; }
+    .folder:hover img { transform: translateY(-4px); filter: drop-shadow(0px 10px 14px rgba(0,0,0,0.16)); }
+    .folder .label { color: var(--fg-muted); font-size: 0.85rem; letter-spacing: 0.02em; margin-top: 0.6rem; }
+    .tab-bar { display: flex; gap: 6px; margin-left: 20px; }
+    .tab { background: #e2e2e2; padding: 5px 10px; border-radius: 4px 4px 0 0; cursor: pointer; color: var(--fg-muted); font-size: 0.85rem; display: flex; align-items: center; gap: 4px; }
+    .tab.active { background: var(--bg-light); font-weight: bold; color: var(--fg-dark); }
+    .tab .close-btn { font-weight: bold; cursor: pointer; }
+    iframe.content-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; display: none; z-index: 10; background: var(--bg-light); }
 
-.about-image {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-}
+    .mail-link { transition: border-color 0.25s ease; }
+    .mail-link:hover { border-bottom-color: var(--accent); }
 
-.about-image img {
-  height: auto;
-  object-fit: contain;
-  filter: none; /* 색상 반전 제거 필요 시 */
-}
-#fp-nav.black-dots ul li a span {
-  background: #000 !important;
-}
-.fp-overflow {
-  overflow: visible !important;
-}
-.section#projects .fp-overflow {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
-}
-
-@media (max-width: 768px) {
-  body { height: auto; overflow-y: auto; overflow-x: hidden; }
-  .mac-container { width: 95%; height: 85vh; }
-  .mac-body { padding: 1.2rem 1rem; }
-  .folder img { width: 78px; }
-  .mac-body.mobile-layout {
-    display: flex;
-    flex-wrap: wrap;
-    align-content: flex-start;
-    gap: 1.2rem;
-    overflow-y: auto;
-  }
-  .mac-body.mobile-layout .folder {
-    position: static;
-    cursor: default;
-  }
-}
+    @media (max-width: 768px) {
+      .mac-container { width: 95%; height: 85vh; }
+      .mac-body { padding: 1.2rem 1rem; }
+      .folder img { width: 78px; }
+      .mac-body.mobile-layout {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: flex-start;
+        gap: 1.2rem;
+        overflow-y: auto;
+      }
+      .mac-body.mobile-layout .folder {
+        position: static;
+        cursor: default;
+      }
+      .dots { right: 0.9rem; gap: 10px; }
+    }
 </style>
 </head>
 <body>
-<div id="fullpage">
-  <div class="section" id="home" style="display: flex; align-items: center; justify-content: flex-start; height: 100vh; padding-left: 8vw; background: radial-gradient(circle at center, #007bff, #00c6ff, #d9faff); text-align: left; overflow: hidden;">
+<div class="scroll-container" id="scrollContainer">
+  <div class="section" id="home" style="display: flex; align-items: center; justify-content: flex-start; padding-left: 8vw; background: radial-gradient(circle at center, #ffffff, var(--bg-light) 55%, #ececec 100%); text-align: left; overflow: hidden;">
     <div class="fade-up" style="position: absolute; top: 20%; left: 8vw; transform: translateY(-50%);">
-      <h1 style="font-size: clamp(1.6rem, 5vw, 3rem); font-weight: 600; margin-bottom: clamp(3rem, 20vw, 16rem); margin-top: 0px; color: #202123;">2025<br><span style="font-size: clamp(3rem, 18vw, 12rem); font-family: 'Heading Pro Trial'; color: #030303;">PORTFOLIO</span></h1>
-      <p style="font-size: clamp(1rem, 3vw, 2rem); max-width: 600px; line-height: 1.7; font-weight: 700; color: #333;">JEONG CHAN HEE</p>
+      <h1 style="font-size: clamp(1.6rem, 5vw, 2.8rem); font-weight: 600; letter-spacing: -0.01em; margin-bottom: clamp(3rem, 18vw, 13rem); margin-top: 0px; color: var(--fg-dark);">2025<br><span style="font-size: clamp(3rem, 16vw, 10rem); font-family: 'Heading Pro Trial'; letter-spacing: -0.02em; color: var(--fg-dark);">PORTFOLIO</span></h1>
+      <p style="font-size: clamp(1rem, 3vw, 1.8rem); max-width: 600px; line-height: 1.7; font-weight: 600; letter-spacing: 0.02em; color: var(--fg-muted);">JEONG CHAN HEE</p>
     </div>
   </div>
   <div class="section" id="about">
     <div class="about-image"><img src="aboutf.webp" alt="About me" loading="lazy" decoding="async"></div>
   </div>
   <div class="section" id="projects">
-          <h2></h2>
     <div class="mac-container" id="macContainer">
       <div class="mac-titlebar">
         <div class="mac-buttons"><div class="close"></div><div class="minimize"></div><div class="maximize"></div></div>
@@ -148,14 +149,13 @@
       </div>
     </div>
   </div>
-  <div class="section" id="contact" style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; background: #17171b; color: #222; text-align: left;">
-    <p style="color: #fff; font-size: clamp(1.2rem, 4vw, 2.5rem); margin-bottom: 20px; padding: 0 1rem; text-align: center;">함께 일할 그래픽 디자이너를 찾고 계신가요?</p>
-    <h1 style="color: #fff; font-size: clamp(1.6rem, 8vw, 5.5rem); font-weight: 700; margin-top: 0rem; margin-bottom: 1rem; padding: 0 1rem; text-align: center; word-break: break-word;">chanhee.jeong0@gmail.com</h1>
-    <a href="mailto:chanhee.jeong0@gmail.com" style="text-decoration: none; color: #5a3eff; font-weight: 600; display: flex; align-items: center; gap: 6px;">메일 보내기 ➔</a>
+  <div class="section" id="contact" style="display: flex; flex-direction: column; justify-content: center; align-items: center; background: var(--bg-dark); color: #222; text-align: left;">
+    <p style="color: #fff; font-size: clamp(1.2rem, 4vw, 2.3rem); font-weight: 300; margin-bottom: 20px; padding: 0 1rem; text-align: center;">함께 일할 그래픽 디자이너를 찾고 계신가요?</p>
+    <h1 style="color: #fff; font-size: clamp(1.6rem, 8vw, 5rem); font-weight: 700; letter-spacing: -0.01em; margin-top: 0rem; margin-bottom: 1.2rem; padding: 0 1rem; text-align: center; word-break: break-word;">chanhee.jeong0@gmail.com</h1>
+    <a href="mailto:chanhee.jeong0@gmail.com" class="mail-link" style="text-decoration: none; color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid transparent;">메일 보내기 ➔</a>
   </div>
 </div>
 
-<script src="https://unpkg.com/fullpage.js@3.1.2/dist/fullpage.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded',()=>{
   const macBody=document.getElementById('macBody');
@@ -215,22 +215,32 @@ document.addEventListener('DOMContentLoaded',()=>{
   }
 
   document.querySelector('.tab[data-link="home"]').addEventListener('click',()=>activateTab("home"));
-});
-new fullpage('#fullpage', {
-  navigation: true,
-  navigationPosition: 'right',
-  scrollBar: false,
-  responsiveWidth: 768,
-  afterLoad: function(origin, destination){
-    const nav = document.querySelector('#fp-nav');
-    if (destination.index === 1 || destination.index === 2) { // 2번 또는 3번 섹션
-      nav.classList.add('black-dots');
-    } else {
-      nav.classList.remove('black-dots');
-    }
-  }
-});
 
+  const sections=Array.from(document.querySelectorAll('.scroll-container > .section'));
+  const dotsNav=document.createElement('nav');
+  dotsNav.className='dots';
+  sections.forEach(sec=>{
+    const btn=document.createElement('button');
+    btn.setAttribute('aria-label',`go to ${sec.id}`);
+    btn.addEventListener('click',()=>sec.scrollIntoView({behavior:'smooth'}));
+    dotsNav.appendChild(btn);
+  });
+  document.body.appendChild(dotsNav);
+  const dotButtons=dotsNav.querySelectorAll('button');
+
+  const sectionObserver=new IntersectionObserver(entries=>{
+    entries.forEach(entry=>{
+      entry.target.classList.toggle('in-view',entry.isIntersecting);
+      if(entry.isIntersecting){
+        const idx=sections.indexOf(entry.target);
+        dotButtons.forEach(b=>b.classList.remove('active'));
+        dotButtons[idx].classList.add('active');
+        dotsNav.classList.toggle('on-dark',entry.target.id==='contact');
+      }
+    });
+  },{threshold:0.5});
+  sections.forEach(sec=>sectionObserver.observe(sec));
+});
 </script>
 </body>
 </html>
