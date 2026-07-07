@@ -150,9 +150,9 @@
     .frame-wrap { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 10; transform-origin: var(--origin-x, 50%) var(--origin-y, 50%); animation: folderOpen 0.6s cubic-bezier(.34,1.56,.64,1); will-change: transform, opacity; }
     iframe.content-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background: var(--bg-light); }
     @keyframes folderOpen {
-      0% { opacity: 0; transform: scale(0.25) rotate(-35deg); }
-      45% { opacity: 1; }
-      70% { transform: scale(1.05) rotate(8deg); }
+      0% { opacity: 0; transform: scale(0.05) rotate(-6deg); }
+      50% { opacity: 1; }
+      78% { transform: scale(1.035) rotate(1deg); }
       100% { opacity: 1; transform: scale(1) rotate(0deg); }
     }
 
@@ -554,9 +554,14 @@ document.addEventListener('DOMContentLoaded',()=>{
     // fetch() actually issues the request in every browser; <link rel=prefetch>
     // is silently ignored by Safari and its timing via requestIdleCallback was
     // unpredictable, so downloads visibly only started once a folder was opened.
-    assets.forEach(href=>{
-      fetch(encodeURI(href),{priority:'low'}).catch(()=>{});
-    });
+    // Fetched one at a time (not all 19 at once) so a folder the user actually
+    // opens isn't starved of bandwidth by ~470MB of simultaneous background transfers.
+    async function prefetchSequentially(){
+      for(const href of assets){
+        await fetch(encodeURI(href),{priority:'low'}).catch(()=>{});
+      }
+    }
+    prefetchSequentially();
   }
 });
 </script>
