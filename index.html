@@ -310,7 +310,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   setupWheelScroll();
   setupTextReveal();
   setupCustomCursor();
-  setupGalleryPrefetch();
 
   // ---- mac-window folders: placement, drag, magnetic hover ----
   function setupFolders(){
@@ -552,29 +551,6 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
   }
 
-  // ---- background-prefetch project gallery assets after initial load ----
-  function setupGalleryPrefetch(){
-    const conn=navigator.connection;
-    if(conn&&(conn.saveData||/2g/.test(conn.effectiveType||'')))return;
-
-    const assets=[
-      'Typography.png','Frame 9.png','bx.png','c1.png','c2.png','RAP.png',
-      'j/j1.png','j/j2.gif','j/j3.gif','j/j4.png','j/j5.gif','j/j6.png',
-      'j/j7.png','j/j8.png','j/j9.gif','j/j10.png','j/j11.png','j/j12.png','j/j13.png'
-    ];
-
-    // fetch() actually issues the request in every browser; <link rel=prefetch>
-    // is silently ignored by Safari and its timing via requestIdleCallback was
-    // unpredictable, so downloads visibly only started once a folder was opened.
-    // Fetched one at a time (not all 19 at once) so a folder the user actually
-    // opens isn't starved of bandwidth by ~470MB of simultaneous background transfers.
-    async function prefetchSequentially(){
-      for(const href of assets){
-        await fetch(encodeURI(href),{priority:'low'}).catch(()=>{});
-      }
-    }
-    prefetchSequentially();
-  }
 });
 </script>
 </body>
