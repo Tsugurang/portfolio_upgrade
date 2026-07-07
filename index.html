@@ -84,6 +84,7 @@
       display: flex;
       justify-content: center;
       align-items: center;
+      background: var(--bg-light);
       z-index: 1;
     }
     .about-content {
@@ -162,7 +163,7 @@
 <body>
 <div class="cursor-dot" id="cursorDot"></div>
 <div class="scroll-container" id="scrollContainer">
-  <div class="section" id="home" style="display: flex; align-items: center; justify-content: flex-start; padding-left: 8vw; background: radial-gradient(circle at center, #007bff, #00c6ff, #d9faff); text-align: left; overflow: hidden;">
+  <div class="section" id="home" style="display: flex; align-items: center; justify-content: flex-start; padding-left: 8vw; background: linear-gradient(180deg, #007bff 0%, #00c6ff 42%, #d9faff 72%, var(--bg-light) 100%); text-align: left; overflow: hidden;">
     <div class="fade-up" style="position: absolute; top: 20%; left: 8vw; transform: translateY(-50%);">
       <h1 style="font-size: clamp(1.6rem, 5vw, 2.8rem); font-weight: 600; letter-spacing: -0.01em; margin-bottom: clamp(3rem, 18vw, 13rem); margin-top: 0px; color: #202123;">2026<br><span style="font-size: clamp(3rem, 16vw, 10rem); font-family: 'Heading Pro Trial'; letter-spacing: -0.02em; color: #030303;">PORTFOLIO</span></h1>
       <p style="font-size: clamp(1rem, 3vw, 1.8rem); max-width: 600px; line-height: 1.7; font-weight: 600; letter-spacing: 0.02em; color: #333;">JEONG CHAN HEE</p>
@@ -249,6 +250,8 @@
 
 <script>
 document.addEventListener('DOMContentLoaded',()=>{
+  const scrollContainer=document.getElementById('scrollContainer');
+  let currentSectionIndex=0;
   const macBody=document.getElementById('macBody');
   const folders=macBody.querySelectorAll('.folder');
   const tabBar=document.querySelector('.tab-bar');
@@ -327,10 +330,10 @@ document.addEventListener('DOMContentLoaded',()=>{
   const sections=Array.from(document.querySelectorAll('.scroll-container > .section'));
   const dotsNav=document.createElement('nav');
   dotsNav.className='dots';
-  sections.forEach(sec=>{
+  sections.forEach((sec,i)=>{
     const btn=document.createElement('button');
     btn.setAttribute('aria-label',`go to ${sec.id}`);
-    btn.addEventListener('click',()=>sec.scrollIntoView({behavior:'smooth'}));
+    btn.addEventListener('click',()=>scrollToIndex(i));
     dotsNav.appendChild(btn);
   });
   document.body.appendChild(dotsNav);
@@ -347,6 +350,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     entries.forEach(entry=>{
       if(entry.isIntersecting){
         const idx=sections.indexOf(entry.target);
+        currentSectionIndex=idx;
         dotButtons.forEach(b=>b.classList.remove('active'));
         dotButtons[idx].classList.add('active');
         dotsNav.classList.toggle('on-dark',entry.target.id==='contact');
@@ -354,6 +358,38 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
   },{threshold:0.5});
   sections.forEach(sec=>activeObserver.observe(sec));
+
+  function easeInOutCubic(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+
+  let isScrollAnimating=false;
+  function scrollToIndex(index){
+    index=Math.max(0,Math.min(sections.length-1,index));
+    currentSectionIndex=index;
+    const startY=scrollContainer.scrollTop;
+    const targetY=sections[index].offsetTop;
+    const distance=targetY-startY;
+    if(Math.abs(distance)<1)return;
+    isScrollAnimating=true;
+    const duration=850;
+    const startTime=performance.now();
+    function step(now){
+      const t=Math.min((now-startTime)/duration,1);
+      scrollContainer.scrollTop=startY+distance*easeInOutCubic(t);
+      if(t<1)requestAnimationFrame(step);else isScrollAnimating=false;
+    }
+    requestAnimationFrame(step);
+  }
+
+  if(!isTouch){
+    let wheelCooldown=false;
+    scrollContainer.addEventListener('wheel',e=>{
+      e.preventDefault();
+      if(isScrollAnimating||wheelCooldown)return;
+      wheelCooldown=true;
+      setTimeout(()=>{wheelCooldown=false;},850);
+      scrollToIndex(currentSectionIndex+(e.deltaY>0?1:-1));
+    },{passive:false});
+  }
 
   function splitIntoSpans(el,className,unit){
     const text=el.textContent;
