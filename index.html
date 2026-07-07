@@ -142,7 +142,8 @@
     .tab-bar { display: flex; gap: 6px; margin-left: 20px; }
     .tab { background: #e2e2e2; padding: 5px 10px; border-radius: 4px 4px 0 0; cursor: pointer; color: var(--fg-muted); font-size: 0.85rem; display: flex; align-items: center; gap: 4px; }
     .tab.active { background: var(--bg-light); font-weight: bold; color: var(--fg-dark); }
-    .tab .close-btn { font-weight: bold; cursor: pointer; }
+    .tab .close-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+    .tab .close-btn:hover { background: rgba(0, 0, 0, 0.08); }
     iframe.content-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; display: none; z-index: 10; background: var(--bg-light); }
 
     .mail-link { transition: border-color 0.25s ease; }
@@ -256,47 +257,58 @@
 
 <script>
 document.addEventListener('DOMContentLoaded',()=>{
+  // ---- shared refs & state ----
+  const isMobile=window.matchMedia('(max-width: 768px)').matches;
+  const isTouch=window.matchMedia('(pointer: coarse)').matches;
+
   const scrollContainer=document.getElementById('scrollContainer');
-  let currentSectionIndex=0;
   const macBody=document.getElementById('macBody');
   const folders=macBody.querySelectorAll('.folder');
   const tabBar=document.querySelector('.tab-bar');
   const cursorDot=document.getElementById('cursorDot');
-  const iframes={};
+  const sections=Array.from(document.querySelectorAll('.scroll-container > .section'));
+
   const tabs={};
-  const placed=[];
-  const containerRect=macBody.getBoundingClientRect();
-  const folderSize=130,labelSpace=40,padding=20;
-  const isMobile=window.matchMedia('(max-width: 768px)').matches;
-  if(isMobile)macBody.classList.add('mobile-layout');
+  const iframes={};
+  let dotButtons=[];
+  let dotsNav=null;
+  let currentSectionIndex=0;
+  let isScrollAnimating=false;
 
   function clamp(val,min,max){return Math.max(min,Math.min(max,val));}
-  const maxX=containerRect.width-folderSize-padding;
-  const maxY=containerRect.height-folderSize-labelSpace-padding;
+  function easeInOutCubic(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
 
-  function isOverlapping(x,y){
-    return placed.some(pos=>Math.abs(pos.x-x)<folderSize+padding&&Math.abs(pos.y-y)<folderSize+padding);
-  }
-
-  function openLink(folder){
-    const link=folder.getAttribute('data-link'),label=folder.querySelector('.label').textContent;
-    if(!tabs[link]){
-      const tab=document.createElement('div');tab.className='tab';tab.dataset.link=link;
-      tab.innerHTML=`${label} <span class="close-btn">x</span>`;
-      tab.querySelector('.close-btn').addEventListener('click',(e)=>{e.stopPropagation();tab.remove();delete tabs[link];const remaining=Object.keys(tabs);if(remaining.length)activateTab(remaining[0]);else activateTab('home');});
-      tab.addEventListener('click',()=>activateTab(link));
-      tabBar.appendChild(tab);tabs[link]=true;
-    }
-    activateTab(link);
-  }
-
-  const isTouch=window.matchMedia('(pointer: coarse)').matches;
   if(isTouch)scrollContainer.classList.add('native-snap');
+  if(isMobile)macBody.classList.add('mobile-layout');
 
-  folders.forEach(folder=>{
-    folder.querySelector('img').style.animationDelay=`${(Math.random()*2).toFixed(2)}s`;
+  setupFolders();
+  setupTabs();
+  setupScrollDots();
+  setupScrollReveal();
+  setupWheelScroll();
+  setupTextReveal();
+  setupCustomCursor();
 
-    if(!isMobile){
+  // ---- mac-window folders: placement, drag, magnetic hover ----
+  function setupFolders(){
+    const folderSize=130,labelSpace=40,padding=20;
+    const containerRect=macBody.getBoundingClientRect();
+    const maxX=containerRect.width-folderSize-padding;
+    const maxY=containerRect.height-folderSize-labelSpace-padding;
+    const placed=[];
+
+    function isOverlapping(x,y){
+      return placed.some(pos=>Math.abs(pos.x-x)<folderSize+padding&&Math.abs(pos.y-y)<folderSize+padding);
+    }
+
+    folders.forEach(folder=>{
+      folder.querySelector('img').style.animationDelay=`${(Math.random()*2).toFixed(2)}s`;
+
+      if(isMobile){
+        folder.addEventListener('click',()=>openTab(folder));
+        return;
+      }
+
       let x,y,tries=0;
       do{
         x=Math.random()*(maxX-padding)+padding;
@@ -305,35 +317,71 @@ document.addEventListener('DOMContentLoaded',()=>{
       }while(isOverlapping(x,y)&&tries<100);
       folder.style.left=`${x}px`;folder.style.top=`${y}px`;placed.push({x,y});
 
-      let dragging=false;
-      folder.addEventListener('pointerdown',e=>{
-        e.preventDefault();dragging=true;folder.style.transform='';
-        const offsetX=e.clientX-folder.offsetLeft,offsetY=e.clientY-folder.offsetTop;
-        const onMove=ev=>{
-          folder.style.left=`${clamp(ev.clientX-offsetX,padding,maxX)}px`;
-          folder.style.top=`${clamp(ev.clientY-offsetY,padding,maxY)}px`;
-        };
-        const onUp=()=>{dragging=false;document.removeEventListener('pointermove',onMove);document.removeEventListener('pointerup',onUp);};
-        document.addEventListener('pointermove',onMove);document.addEventListener('pointerup',onUp);
+      const dragState={dragging:false};
+      makeDraggable(folder,dragState,maxX,maxY,padding);
+      if(!isTouch)makeMagnetic(folder,dragState);
+      folder.addEventListener('dblclick',()=>openTab(folder));
+    });
+  }
+
+  function makeDraggable(folder,dragState,maxX,maxY,padding){
+    folder.addEventListener('pointerdown',e=>{
+      e.preventDefault();
+      dragState.dragging=true;
+      folder.style.transform='';
+      const offsetX=e.clientX-folder.offsetLeft,offsetY=e.clientY-folder.offsetTop;
+      const onMove=ev=>{
+        folder.style.left=`${clamp(ev.clientX-offsetX,padding,maxX)}px`;
+        folder.style.top=`${clamp(ev.clientY-offsetY,padding,maxY)}px`;
+      };
+      const onUp=()=>{
+        dragState.dragging=false;
+        document.removeEventListener('pointermove',onMove);
+        document.removeEventListener('pointerup',onUp);
+      };
+      document.addEventListener('pointermove',onMove);
+      document.addEventListener('pointerup',onUp);
+    });
+  }
+
+  function makeMagnetic(folder,dragState){
+    const maxPull=14;
+    let rect=null;
+    folder.addEventListener('mouseenter',()=>{if(!dragState.dragging)rect=folder.getBoundingClientRect();});
+    folder.addEventListener('mousemove',e=>{
+      if(dragState.dragging||!rect)return;
+      const nx=clamp((e.clientX-(rect.left+rect.width/2))*0.25,-maxPull,maxPull);
+      const ny=clamp((e.clientY-(rect.top+rect.height/2))*0.25,-maxPull,maxPull);
+      folder.style.transform=`translate(${nx}px, ${ny}px)`;
+    });
+    folder.addEventListener('mouseleave',()=>{
+      rect=null;
+      if(!dragState.dragging)folder.style.transform='';
+    });
+  }
+
+  // ---- tabs & per-tab iframes ----
+  function setupTabs(){
+    document.querySelector('.tab[data-link="home"]').addEventListener('click',()=>activateTab('home'));
+  }
+
+  function openTab(folder){
+    const link=folder.getAttribute('data-link'),label=folder.querySelector('.label').textContent;
+    if(!tabs[link]){
+      const tab=document.createElement('div');tab.className='tab';tab.dataset.link=link;
+      tab.innerHTML=`${label} <span class="close-btn">x</span>`;
+      tab.querySelector('.close-btn').addEventListener('click',e=>{
+        e.stopPropagation();
+        tab.remove();
+        delete tabs[link];
+        const remaining=Object.keys(tabs);
+        activateTab(remaining.length?remaining[0]:'home');
       });
-
-      if(!isTouch){
-        const maxPull=14;
-        folder.addEventListener('mousemove',e=>{
-          if(dragging)return;
-          const rect=folder.getBoundingClientRect();
-          const nx=clamp((e.clientX-(rect.left+rect.width/2))*0.25,-maxPull,maxPull);
-          const ny=clamp((e.clientY-(rect.top+rect.height/2))*0.25,-maxPull,maxPull);
-          folder.style.transform=`translate(${nx}px, ${ny}px)`;
-        });
-        folder.addEventListener('mouseleave',()=>{if(!dragging)folder.style.transform='';});
-      }
-
-      folder.addEventListener('dblclick',()=>openLink(folder));
-    } else {
-      folder.addEventListener('click',()=>openLink(folder));
+      tab.addEventListener('click',()=>activateTab(link));
+      tabBar.appendChild(tab);tabs[link]=true;
     }
-  });
+    activateTab(link);
+  }
 
   function activateTab(link){
     document.querySelectorAll('.tab').forEach(tab=>tab.classList.remove('active'));
@@ -344,51 +392,54 @@ document.addEventListener('DOMContentLoaded',()=>{
       const f=document.createElement('iframe');
       f.className='content-frame';
       f.src=link;
-      f.addEventListener('mouseenter',()=>{cursorDot.style.opacity='0';});
-      f.addEventListener('mouseleave',()=>{cursorDot.style.opacity='1';});
+      if(!isTouch){
+        f.addEventListener('mouseenter',()=>{cursorDot.style.opacity='0';});
+        f.addEventListener('mouseleave',()=>{cursorDot.style.opacity='1';});
+      }
       macBody.appendChild(f);
       iframes[link]=f;
     }
     iframes[link].style.display='block';
   }
 
-  document.querySelector('.tab[data-link="home"]').addEventListener('click',()=>activateTab("home"));
-
-  const sections=Array.from(document.querySelectorAll('.scroll-container > .section'));
-  const dotsNav=document.createElement('nav');
-  dotsNav.className='dots';
-  sections.forEach((sec,i)=>{
-    const btn=document.createElement('button');
-    btn.setAttribute('aria-label',`go to ${sec.id}`);
-    btn.addEventListener('click',()=>scrollToIndex(i));
-    dotsNav.appendChild(btn);
-  });
-  document.body.appendChild(dotsNav);
-  const dotButtons=dotsNav.querySelectorAll('button');
-
-  const revealObserver=new IntersectionObserver(entries=>{
-    entries.forEach(entry=>{
-      entry.target.classList.toggle('in-view',entry.isIntersecting);
+  // ---- right-side nav dots ----
+  function setupScrollDots(){
+    dotsNav=document.createElement('nav');
+    dotsNav.className='dots';
+    sections.forEach((sec,i)=>{
+      const btn=document.createElement('button');
+      btn.setAttribute('aria-label',`go to ${sec.id}`);
+      btn.addEventListener('click',()=>scrollToIndex(i));
+      dotsNav.appendChild(btn);
     });
-  },{threshold:0.15});
-  sections.forEach(sec=>revealObserver.observe(sec));
+    document.body.appendChild(dotsNav);
+    dotButtons=dotsNav.querySelectorAll('button');
+  }
 
-  const activeObserver=new IntersectionObserver(entries=>{
-    entries.forEach(entry=>{
-      if(entry.isIntersecting){
-        const idx=sections.indexOf(entry.target);
-        currentSectionIndex=idx;
-        dotButtons.forEach(b=>b.classList.remove('active'));
-        dotButtons[idx].classList.add('active');
-        dotsNav.classList.toggle('on-dark',entry.target.id==='contact');
-      }
-    });
-  },{threshold:0.5});
-  sections.forEach(sec=>activeObserver.observe(sec));
+  // ---- fade-in reveal + active-section tracking ----
+  function setupScrollReveal(){
+    const revealObserver=new IntersectionObserver(entries=>{
+      entries.forEach(entry=>{
+        entry.target.classList.toggle('in-view',entry.isIntersecting);
+      });
+    },{threshold:0.15});
+    sections.forEach(sec=>revealObserver.observe(sec));
 
-  function easeInOutCubic(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+    const activeObserver=new IntersectionObserver(entries=>{
+      entries.forEach(entry=>{
+        if(entry.isIntersecting){
+          const idx=sections.indexOf(entry.target);
+          currentSectionIndex=idx;
+          dotButtons.forEach(b=>b.classList.remove('active'));
+          dotButtons[idx].classList.add('active');
+          dotsNav.classList.toggle('on-dark',entry.target.id==='contact');
+        }
+      });
+    },{threshold:0.5});
+    sections.forEach(sec=>activeObserver.observe(sec));
+  }
 
-  let isScrollAnimating=false;
+  // ---- eased scroll-to-section, driven by wheel on desktop ----
   function scrollToIndex(index){
     index=Math.max(0,Math.min(sections.length-1,index));
     currentSectionIndex=index;
@@ -407,7 +458,8 @@ document.addEventListener('DOMContentLoaded',()=>{
     requestAnimationFrame(step);
   }
 
-  if(!isTouch){
+  function setupWheelScroll(){
+    if(isTouch)return;
     let wheelCooldown=false;
     scrollContainer.addEventListener('wheel',e=>{
       e.preventDefault();
@@ -418,6 +470,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     },{passive:false});
   }
 
+  // ---- word/letter stagger reveal ----
   function splitIntoSpans(el,className,unit){
     const text=el.textContent;
     el.textContent='';
@@ -431,12 +484,24 @@ document.addEventListener('DOMContentLoaded',()=>{
       el.appendChild(span);
     });
   }
-  splitIntoSpans(document.getElementById('contactLead'),'word','word');
 
-  if(!isTouch){
+  function setupTextReveal(){
+    splitIntoSpans(document.getElementById('contactLead'),'word','word');
+  }
+
+  // ---- custom cursor (desktop only) ----
+  function setupCustomCursor(){
+    if(isTouch)return;
+    let queuedX=0,queuedY=0,rafPending=false;
     document.addEventListener('mousemove',e=>{
-      cursorDot.style.left=`${e.clientX}px`;
-      cursorDot.style.top=`${e.clientY}px`;
+      queuedX=e.clientX;queuedY=e.clientY;
+      if(rafPending)return;
+      rafPending=true;
+      requestAnimationFrame(()=>{
+        cursorDot.style.left=`${queuedX}px`;
+        cursorDot.style.top=`${queuedY}px`;
+        rafPending=false;
+      });
     });
     document.querySelectorAll('.folder, a, .dots button').forEach(el=>{
       el.addEventListener('mouseenter',()=>{cursorDot.classList.add('hover');cursorDot.textContent=el.classList.contains('folder')?'OPEN':'';});
