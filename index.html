@@ -96,25 +96,25 @@
     }
     .about-content {
       width: 100%;
-      max-width: 1680px;
+      max-width: 1400px;
       max-height: 88vh;
       overflow-y: auto;
       display: grid;
       grid-template-columns: 1.1fr 1fr 1fr;
-      gap: 4.5rem;
+      gap: 3rem;
       text-align: left;
-      padding: 1rem 1.5rem 2rem;
+      padding: 1rem 1rem 2rem;
       box-sizing: border-box;
     }
     .about-col h2 { font-size: clamp(1.3rem, 2.4vw, 2.1rem); line-height: 1.35; font-weight: 800; letter-spacing: -0.01em; margin: 0 0 1.5rem; color: var(--fg-dark); }
     .about-col h3 { font-size: 0.9rem; letter-spacing: 0.06em; margin: 0 0 1rem; color: var(--fg-dark); }
-    .about-col p { font-size: 1rem; line-height: 1.8; color: var(--fg-muted); margin: 0 0 1.2rem; }
+    .about-col p { font-size: 0.95rem; line-height: 1.75; color: var(--fg-muted); margin: 0 0 1.2rem; }
     .about-col strong { color: var(--fg-dark); }
     .about-contact { margin-top: 2.5rem; }
     .about-list { list-style: none; margin: 0 0 2rem; padding: 0; }
-    .about-list li { margin-bottom: 2rem; }
-    .about-list li strong { display: block; font-size: 0.98rem; line-height: 1.4; color: var(--fg-dark); margin-bottom: 0.35rem; }
-    .about-list li span { display: block; font-size: 0.82rem; color: var(--fg-muted); line-height: 1.6; }
+    .about-list li { margin-bottom: 1.2rem; }
+    .about-list li strong { display: block; font-size: 0.92rem; color: var(--fg-dark); margin-bottom: 0.25rem; }
+    .about-list li span { display: block; font-size: 0.78rem; color: var(--fg-muted); line-height: 1.5; }
     .icon-row { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-bottom: 1.5rem; }
     .icon-row img, .icon-row i { width: 34px; height: 34px; font-size: 34px; line-height: 34px; color: var(--fg-dark); border-radius: 7px; }
     .badge-row { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-bottom: 1.5rem; }
@@ -288,6 +288,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   setupWheelScroll();
   setupTextReveal();
   setupCustomCursor();
+  setupGalleryPrefetch();
 
   // ---- mac-window folders: placement, drag, magnetic hover ----
   function setupFolders(){
@@ -507,6 +508,30 @@ document.addEventListener('DOMContentLoaded',()=>{
       el.addEventListener('mouseenter',()=>{cursorDot.classList.add('hover');cursorDot.textContent=el.classList.contains('folder')?'OPEN':'';});
       el.addEventListener('mouseleave',()=>{cursorDot.classList.remove('hover');cursorDot.textContent='';});
     });
+  }
+
+  // ---- background-prefetch project gallery assets after initial load ----
+  function setupGalleryPrefetch(){
+    const conn=navigator.connection;
+    if(conn&&(conn.saveData||/2g/.test(conn.effectiveType||'')))return;
+
+    const assets=[
+      'Typography.png','Frame 9.png','bx.png','c1.png','c2.png','RAP.png',
+      'j/j1.png','j/j2.gif','j/j3.gif','j/j4.png','j/j5.gif','j/j6.png',
+      'j/j7.png','j/j8.png','j/j9.gif','j/j10.png','j/j11.png','j/j12.png','j/j13.png'
+    ];
+
+    function prefetch(){
+      assets.forEach(href=>{
+        const link=document.createElement('link');
+        link.rel='prefetch';
+        link.href=href;
+        document.head.appendChild(link);
+      });
+    }
+
+    const idle=window.requestIdleCallback||(fn=>setTimeout(fn,2000));
+    idle(prefetch);
   }
 });
 </script>
