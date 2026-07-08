@@ -128,6 +128,10 @@
     }
 
     .mac-container { margin: 0 auto; background: var(--bg-light); border: 1px solid var(--border); border-radius: 20px; width: 90%; aspect-ratio: 16 / 9; max-height: 90vh; overflow: hidden; position: relative; display: flex; flex-direction: column; box-shadow: var(--shadow); }
+    /* Easter egg (real macOS behavior): green zooms the window to fill the
+       whole viewport, yellow puts it back. Escape also exits. */
+    .mac-container.fullscreen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; max-height: none; aspect-ratio: auto; border-radius: 0; border: none; margin: 0; z-index: 100; animation: zoomIn 0.35s ease-out; }
+    @keyframes zoomIn { from { transform: scale(0.96); opacity: 0.5; } to { transform: scale(1); opacity: 1; } }
     .mac-titlebar { height: 36px; background: #efefef; display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid var(--border); }
     .mac-buttons { display: flex; gap: 6px; }
     .mac-buttons div { width: 12px; height: 12px; border-radius: 50%; }
@@ -294,6 +298,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const isTouch=window.matchMedia('(pointer: coarse)').matches;
 
   const scrollContainer=document.getElementById('scrollContainer');
+  const macContainer=document.getElementById('macContainer');
   const macBody=document.getElementById('macBody');
   const folders=macBody.querySelectorAll('.folder');
   const tabBar=document.querySelector('.tab-bar');
@@ -333,6 +338,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   setupFolders();
   setupTabs();
+  setupWindowButtons();
   setupScrollDots();
   setupScrollReveal();
   setupWheelScroll();
@@ -414,6 +420,15 @@ document.addEventListener('DOMContentLoaded',()=>{
   // ---- tabs & per-tab iframes ----
   function setupTabs(){
     document.querySelector('.tab[data-link="home"]').addEventListener('click',()=>activateTab('home'));
+  }
+
+  // ---- titlebar traffic lights: green = fullscreen, yellow = restore ----
+  function setupWindowButtons(){
+    macContainer.querySelector('.maximize').addEventListener('click',()=>macContainer.classList.add('fullscreen'));
+    macContainer.querySelector('.minimize').addEventListener('click',()=>macContainer.classList.remove('fullscreen'));
+    document.addEventListener('keydown',e=>{
+      if(e.key==='Escape')macContainer.classList.remove('fullscreen');
+    });
   }
 
   function openTab(folder){
@@ -599,6 +614,10 @@ document.addEventListener('DOMContentLoaded',()=>{
       // the noise (small deltaY) and the tail of the gesture that just
       // finished (a short grace period keyed off the single isScrollAnimating
       // clock instead of a second, independently-drifting timer).
+      // While the mac window is fullscreen it covers the viewport, so
+      // paging the sections behind it would just silently change where
+      // the user lands when they exit.
+      if(macContainer.classList.contains('fullscreen'))return;
       if(isScrollAnimating||Math.abs(e.deltaY)<4||performance.now()-lastScrollEnd<300)return;
       scrollToIndex(currentSectionIndex+(e.deltaY>0?1:-1));
     },{passive:false});
