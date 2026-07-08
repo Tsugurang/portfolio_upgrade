@@ -53,7 +53,7 @@
     @keyframes fadeUp { 0% { opacity: 0; transform: translateY(40px); } 100% { opacity: 1; transform: translateY(0); } }
     .fade-up { opacity: 0; animation: fadeUp 1s ease-out forwards; animation-delay: 0.3s; }
 
-    .cursor-dot { position: fixed; top: 0; left: 0; width: 14px; height: 14px; border-radius: 50%; background: #fff; pointer-events: none; z-index: 9999; mix-blend-mode: difference; transform: translate(-50%, -50%); transition: width 0.25s ease, height 0.25s ease, background 0.25s ease, opacity 0.15s ease; will-change: transform; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em; color: transparent; }
+    .cursor-dot { position: fixed; top: 0; left: 0; width: 14px; height: 14px; border-radius: 50%; background: #fff; pointer-events: none; z-index: 9999; mix-blend-mode: difference; transform: translate3d(0,0,0) translate(-50%, -50%); transition: width 0.25s ease, height 0.25s ease, background 0.25s ease, opacity 0.15s ease; will-change: transform; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em; color: transparent; }
     .cursor-dot.hover { width: 64px; height: 64px; background: #000; color: #fff; mix-blend-mode: normal; }
     @media (pointer: coarse) { .cursor-dot { display: none; } }
 
@@ -144,13 +144,24 @@
     .tab.active { background: var(--bg-light); font-weight: bold; color: var(--fg-dark); }
     .tab .close-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; font-weight: bold; }
     .tab .close-btn:hover { background: rgba(0, 0, 0, 0.08); }
-    .frame-wrap { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 10; transform-origin: var(--origin-x, 50%) var(--origin-y, 50%); animation: folderOpen 0.6s cubic-bezier(.34,1.56,.64,1); will-change: transform, opacity; }
+    .frame-wrap { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 10; animation: genieOpen 0.55s cubic-bezier(.16,.85,.35,1); will-change: clip-path, transform, opacity; }
     iframe.content-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background: var(--bg-light); }
-    @keyframes folderOpen {
-      0% { opacity: 0; transform: scale(0.05) rotate(-6deg); }
-      50% { opacity: 1; }
-      78% { transform: scale(1.035) rotate(1deg); }
-      100% { opacity: 1; transform: scale(1) rotate(0deg); }
+    @keyframes genieOpen {
+      0% {
+        opacity: 0;
+        transform: scaleY(0.4);
+        clip-path: polygon(var(--origin-x, 50%) var(--origin-y, 100%), var(--origin-x, 50%) var(--origin-y, 100%), var(--origin-x, 50%) var(--origin-y, 100%), var(--origin-x, 50%) var(--origin-y, 100%));
+      }
+      45% {
+        opacity: 1;
+        transform: scaleY(1.06);
+        clip-path: polygon(calc(var(--origin-x, 50%) - 7%) 0%, calc(var(--origin-x, 50%) + 7%) 0%, calc(var(--origin-x, 50%) + 7%) 100%, calc(var(--origin-x, 50%) - 7%) 100%);
+      }
+      100% {
+        opacity: 1;
+        transform: scaleY(1);
+        clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+      }
     }
 
     .frame-loader { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 11; background: var(--bg-light); }
@@ -540,8 +551,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       if(rafPending)return;
       rafPending=true;
       requestAnimationFrame(()=>{
-        cursorDot.style.left=`${queuedX}px`;
-        cursorDot.style.top=`${queuedY}px`;
+        cursorDot.style.transform=`translate3d(${queuedX}px, ${queuedY}px, 0) translate(-50%, -50%)`;
         rafPending=false;
       });
     });
