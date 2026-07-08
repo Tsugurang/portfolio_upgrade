@@ -60,7 +60,7 @@
        frame). Position updates only ever touch `transform`, which is
        compositor-only, and a short transition on it means a dropped JS
        frame glides to the next point instead of visibly popping/vanishing. */
-    .cursor-dot { position: fixed; top: 0; left: 0; width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%; background: #fff; border: 2px solid rgba(0,0,0,0.55); pointer-events: none; z-index: 9999; transform: translate3d(0,0,0) translate(-50%, -50%); transition: width 0.25s ease, height 0.25s ease, background 0.25s ease, opacity 0.15s ease, border-color 0.25s ease, transform 0.08s linear; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; color: transparent; }
+    .cursor-dot { position: fixed; top: 0; left: 0; width: 26px; height: 26px; box-sizing: border-box; border-radius: 50%; background: transparent; border: 2px solid rgba(0,0,0,0.6); outline: 1.5px solid rgba(255,255,255,0.55); pointer-events: none; z-index: 9999; transform: translate3d(0,0,0) translate(-50%, -50%); transition: width 0.25s ease, height 0.25s ease, background 0.25s ease, opacity 0.15s ease, border-color 0.25s ease, transform 0.08s linear; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; color: transparent; }
     .cursor-dot.hover { width: 76px; height: 76px; background: #000; color: #fff; border-color: rgba(255,255,255,0.5); }
     @media (pointer: coarse) { .cursor-dot { display: none; } }
 
@@ -166,8 +166,12 @@
       100% { opacity: 1; transform: scale(1); }
     }
 
-    .frame-loader { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 11; background: #efefef; }
-    .frame-loader::after { content: ''; width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--fg-dark); animation: spin 0.7s linear infinite; }
+    /* Loading indicator: a translucent black veil over the whole mac window
+       (folders stay visible beneath) rather than a separate opaque panel.
+       It's also delayed ~200ms in JS, so content that's already
+       cached/prefetched opens with no loading flash at all. */
+    .frame-loader { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; align-items: center; justify-content: center; z-index: 15; background: rgba(0,0,0,0.45); }
+    .frame-loader::after { content: ''; width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.3); border-top-color: #fff; animation: spin 0.7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .mail-link { transition: border-color 0.25s ease; }
@@ -311,8 +315,24 @@ document.addEventListener('DOMContentLoaded',()=>{
   let isScrollAnimating=false;
   let lastScrollEnd=0;
   let scrollToken=0;
+  let activeLink='home';
+  let loaderEl=null;
+  let loaderTimer=null;
 
   function clamp(val,min,max){return Math.max(min,Math.min(max,val));}
+
+  // Shared by the document-level tracker in setupCustomCursor and the
+  // per-iframe bridges in activateTab, so both drive the same rAF queue.
+  let cursorQX=0,cursorQY=0,cursorRafPending=false;
+  function positionCursor(x,y){
+    cursorQX=x;cursorQY=y;
+    if(cursorRafPending)return;
+    cursorRafPending=true;
+    requestAnimationFrame(()=>{
+      cursorDot.style.transform=`translate3d(${cursorQX}px, ${cursorQY}px, 0) translate(-50%, -50%)`;
+      cursorRafPending=false;
+    });
+  }
   function easeInOutCubic(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
 
   // scroll-snap-type on the outer container was blocking touch scroll from
@@ -424,10 +444,51 @@ document.addEventListener('DOMContentLoaded',()=>{
     activateTab(link,folder);
   }
 
+  function hideLoader(){
+    clearTimeout(loaderTimer);
+    if(loaderEl)loaderEl.style.display='none';
+  }
+
+  function showLoaderDelayed(link,wrap){
+    clearTimeout(loaderTimer);
+    loaderTimer=setTimeout(()=>{
+      if(activeLink!==link||wrap.dataset.loaded)return;
+      if(!loaderEl){
+        loaderEl=document.createElement('div');
+        loaderEl.className='frame-loader';
+        macBody.appendChild(loaderEl);
+      }
+      loaderEl.style.display='flex';
+    },200);
+  }
+
+  // The custom cursor's pointermove listener lives on our document, and
+  // events inside an iframe belong to the iframe's own document - so the
+  // dot used to just freeze at the window edge over opened work pages.
+  // All the viewers are same-origin local files, so we can reach in, hide
+  // the native cursor there too, and forward the iframe's pointer position
+  // (offset by the iframe's own screen position) into the shared tracker.
+  function bridgeCursorIntoIframe(f){
+    if(isTouch)return;
+    try{
+      const doc=f.contentDocument;
+      if(!doc||!doc.head)return;
+      const st=doc.createElement('style');
+      st.textContent='html,body{cursor:none!important}';
+      doc.head.appendChild(st);
+      doc.addEventListener('pointermove',ev=>{
+        const r=f.getBoundingClientRect();
+        positionCursor(r.left+ev.clientX,r.top+ev.clientY);
+      });
+    }catch(e){}
+  }
+
   function activateTab(link,originFolder){
+    activeLink=link;
     document.querySelectorAll('.tab').forEach(tab=>tab.classList.remove('active'));
     const tab=document.querySelector(`.tab[data-link="${link}"]`);if(tab)tab.classList.add('active');
     Object.values(iframes).forEach(f=>{f.style.display='none';});
+    hideLoader();
     if(link==='home')return;
     if(!iframes[link]){
       const wrap=document.createElement('div');
@@ -439,24 +500,32 @@ document.addEventListener('DOMContentLoaded',()=>{
         wrap.style.setProperty('--origin-y',`${((fRect.top+fRect.height/2-macRect.top)/macRect.height*100).toFixed(1)}%`);
       }
 
-      const loader=document.createElement('div');
-      loader.className='frame-loader';
-      wrap.appendChild(loader);
-
       const f=document.createElement('iframe');
       f.className='content-frame';
       f.src=link;
-      if(!isTouch){
-        f.addEventListener('mouseenter',()=>{cursorDot.style.opacity='0';});
-        f.addEventListener('mouseleave',()=>{cursorDot.style.opacity='1';});
-      }
-      f.addEventListener('load',()=>{loader.remove();wrap.classList.add('pop');});
+      f.addEventListener('load',()=>{
+        wrap.dataset.loaded='1';
+        wrap.classList.add('pop');
+        bridgeCursorIntoIframe(f);
+        if(activeLink===link){
+          hideLoader();
+          wrap.style.display='block';
+        }
+      });
       wrap.appendChild(f);
 
       macBody.appendChild(wrap);
       iframes[link]=wrap;
     }
-    iframes[link].style.display='block';
+    const wrap=iframes[link];
+    if(wrap.dataset.loaded){
+      wrap.style.display='block';
+    }else{
+      // Keep the wrap hidden until the iframe finishes loading; the veil
+      // (if the wait even lasts long enough to show it) sits over the
+      // still-visible folder desktop instead of a blank white panel.
+      showLoaderDelayed(link,wrap);
+    }
   }
 
   // ---- right-side nav dots ----
@@ -561,20 +630,11 @@ document.addEventListener('DOMContentLoaded',()=>{
   // ---- custom cursor (desktop only) ----
   function setupCustomCursor(){
     if(isTouch)return;
-    let queuedX=0,queuedY=0,rafPending=false;
     // pointermove (not mousemove): folder drag calls preventDefault() on
     // pointerdown, which per spec suppresses the synthetic mouse events
     // (mousemove/mouseup) derived from that pointer until release - so a
     // mousemove listener would go silent mid-drag. pointermove keeps firing.
-    document.addEventListener('pointermove',e=>{
-      queuedX=e.clientX;queuedY=e.clientY;
-      if(rafPending)return;
-      rafPending=true;
-      requestAnimationFrame(()=>{
-        cursorDot.style.transform=`translate3d(${queuedX}px, ${queuedY}px, 0) translate(-50%, -50%)`;
-        rafPending=false;
-      });
-    });
+    document.addEventListener('pointermove',e=>positionCursor(e.clientX,e.clientY));
     document.querySelectorAll('.folder, a, .dots button, .tab, .close-btn, .mac-buttons div').forEach(el=>{
       el.addEventListener('mouseenter',()=>{cursorDot.classList.add('hover');cursorDot.textContent=el.classList.contains('folder')?'OPEN':'';});
       el.addEventListener('mouseleave',()=>{cursorDot.classList.remove('hover');cursorDot.textContent='';});
