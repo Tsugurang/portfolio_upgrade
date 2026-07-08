@@ -53,8 +53,8 @@
     @keyframes fadeUp { 0% { opacity: 0; transform: translateY(40px); } 100% { opacity: 1; transform: translateY(0); } }
     .fade-up { opacity: 0; animation: fadeUp 1s ease-out forwards; animation-delay: 0.3s; }
 
-    .cursor-dot { position: fixed; top: 0; left: 0; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,0.55); pointer-events: none; z-index: 9999; transform: translate3d(0,0,0) translate(-50%, -50%); transition: width 0.25s ease, height 0.25s ease, background 0.25s ease, opacity 0.15s ease; will-change: transform; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em; color: transparent; }
-    .cursor-dot.hover { width: 64px; height: 64px; background: #000; color: #fff; box-shadow: 0 0 0 1.5px rgba(255,255,255,0.5); }
+    .cursor-dot { position: fixed; top: 0; left: 0; width: 14px; height: 14px; box-sizing: border-box; border-radius: 50%; background: #fff; border: 1.5px solid rgba(0,0,0,0.55); pointer-events: none; z-index: 9999; transform: translate3d(0,0,0) translate(-50%, -50%); transition: width 0.25s ease, height 0.25s ease, background 0.25s ease, opacity 0.15s ease, border-color 0.25s ease; will-change: transform; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em; color: transparent; }
+    .cursor-dot.hover { width: 64px; height: 64px; background: #000; color: #fff; border-color: rgba(255,255,255,0.5); }
     @media (pointer: coarse) { .cursor-dot { display: none; } }
 
     @keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
@@ -212,7 +212,7 @@
         <p>브랜드 경험 전반을 아우를 수 있는 더 입체적이고 확장성 있는 디자인을 만들어가고자 합니다.</p>
         <div class="about-contact">
           <h3>CONTACT</h3>
-          <p>chanhee.jeong0@gmail.com</p>
+          <p>chanhee.design@gmail.com</p>
         </div>
       </div>
       <div class="about-col">
@@ -280,8 +280,8 @@
   </div>
   <div class="section" id="contact" style="display: flex; flex-direction: column; justify-content: center; align-items: center; background: var(--bg-dark); color: #222; text-align: left;">
     <p id="contactLead" data-stagger style="color: #fff; font-size: clamp(1.2rem, 4vw, 2.3rem); font-weight: 300; margin-bottom: 20px; padding: 0 1rem; text-align: center;">함께 일할 그래픽 디자이너를 찾고 계신가요?</p>
-    <h1 style="color: #fff; font-size: clamp(1.6rem, 8vw, 5rem); font-weight: 700; letter-spacing: -0.01em; margin-top: 0rem; margin-bottom: 1.2rem; padding: 0 1rem; text-align: center; word-break: break-word;">chanhee.jeong0@gmail.com</h1>
-    <a href="mailto:chanhee.jeong0@gmail.com" class="mail-link" style="text-decoration: none; color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid transparent;">메일 보내기 ➔</a>
+    <h1 style="color: #fff; font-size: clamp(1.6rem, 8vw, 5rem); font-weight: 700; letter-spacing: -0.01em; margin-top: 0rem; margin-bottom: 1.2rem; padding: 0 1rem; text-align: center; word-break: break-word;">chanhee.design@gmail.com</h1>
+    <a href="mailto:chanhee.design@gmail.com" class="mail-link" style="text-decoration: none; color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid transparent;">메일 보내기 ➔</a>
   </div>
 </div>
 
