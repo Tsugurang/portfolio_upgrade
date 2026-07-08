@@ -16,9 +16,12 @@
       --shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
     }
     html, body { margin: 0; height: 100%; overflow: hidden; }
-    body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif; background: var(--bg-light); color: var(--fg-dark); }
-    a, button, .tab, .close-btn, .mac-buttons div, .window-buttons div, .dots button { cursor: pointer; }
-    .folder { cursor: grab; }
+    body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif; background: var(--bg-light); color: var(--fg-dark); cursor: none; }
+    a, button, .folder, .tab, .close-btn, .mac-buttons div, .window-buttons div, .dots button { cursor: none; }
+    @media (pointer: coarse) {
+      body, a, button, .folder, .tab, .close-btn, .mac-buttons div, .window-buttons div, .dots button { cursor: pointer; }
+      .folder { cursor: grab; }
+    }
 
     .scroll-container {
       height: 100vh;
@@ -50,13 +53,14 @@
     @keyframes fadeUp { 0% { opacity: 0; transform: translateY(40px); } 100% { opacity: 1; transform: translateY(0); } }
     .fade-up { opacity: 0; animation: fadeUp 1s ease-out forwards; animation-delay: 0.3s; }
 
-    /* Not a full-page cursor replacement - the native OS cursor stays on
-       (see body/a/button etc above) so the pointer is never at the mercy of
-       our own JS/paint timing. This dot only ever appears while hovering a
-       specific interactive element (see setupCustomCursor), as a decorative
-       "OPEN" accent, so it never has to track fast page-wide movement. */
-    .cursor-dot { position: fixed; top: 0; left: 0; width: 14px; height: 14px; box-sizing: border-box; border-radius: 50%; background: #fff; border: 1.5px solid rgba(0,0,0,0.55); pointer-events: none; z-index: 9999; opacity: 0; transform: translate(-50%, -50%); transition: width 0.25s ease, height 0.25s ease, background 0.25s ease, opacity 0.15s ease, border-color 0.25s ease; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em; color: transparent; }
-    .cursor-dot.active { opacity: 1; }
+    /* Full custom cursor again. Everything that's actually gone wrong in
+       past attempts is avoided at once: mix-blend-mode (broke against the
+       Home gradient), box-shadow (can clip at the will-change GPU layer's
+       bounds during fast motion), and left/top (forces layout+paint every
+       frame). Position updates only ever touch `transform`, which is
+       compositor-only, and a short transition on it means a dropped JS
+       frame glides to the next point instead of visibly popping/vanishing. */
+    .cursor-dot { position: fixed; top: 0; left: 0; width: 14px; height: 14px; box-sizing: border-box; border-radius: 50%; background: #fff; border: 1.5px solid rgba(0,0,0,0.55); pointer-events: none; z-index: 9999; transform: translate3d(0,0,0) translate(-50%, -50%); transition: width 0.25s ease, height 0.25s ease, background 0.25s ease, opacity 0.15s ease, border-color 0.25s ease, transform 0.08s linear; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em; color: transparent; }
     .cursor-dot.hover { width: 64px; height: 64px; background: #000; color: #fff; border-color: rgba(255,255,255,0.5); }
     @media (pointer: coarse) { .cursor-dot { display: none; } }
 
@@ -298,6 +302,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   let dotsNav=null;
   let currentSectionIndex=0;
   let isScrollAnimating=false;
+  let lastScrollEnd=0;
+  let scrollToken=0;
 
   function clamp(val,min,max){return Math.max(min,Math.min(max,val));}
   function easeInOutCubic(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
@@ -433,6 +439,10 @@ document.addEventListener('DOMContentLoaded',()=>{
       const f=document.createElement('iframe');
       f.className='content-frame';
       f.src=link;
+      if(!isTouch){
+        f.addEventListener('mouseenter',()=>{cursorDot.style.opacity='0';});
+        f.addEventListener('mouseleave',()=>{cursorDot.style.opacity='1';});
+      }
       f.addEventListener('load',()=>loader.remove());
       wrap.appendChild(f);
 
@@ -486,26 +496,38 @@ document.addEventListener('DOMContentLoaded',()=>{
     const startY=scrollContainer.scrollTop;
     const targetY=sections[index].offsetTop;
     const distance=targetY-startY;
-    if(Math.abs(distance)<1)return;
+    // A token per call: if scrollToIndex is invoked again (e.g. a dot click)
+    // while a previous animation is still mid-flight, the old step() loop
+    // notices it's been superseded and stops touching scrollTop, instead of
+    // two rAF loops fighting over it and making the scroll look stuck.
+    const myToken=++scrollToken;
+    if(Math.abs(distance)<1){isScrollAnimating=false;lastScrollEnd=performance.now();return;}
     isScrollAnimating=true;
     const duration=850;
     const startTime=performance.now();
     function step(now){
+      if(myToken!==scrollToken)return;
       const t=Math.min((now-startTime)/duration,1);
       scrollContainer.scrollTop=startY+distance*easeInOutCubic(t);
-      if(t<1)requestAnimationFrame(step);else isScrollAnimating=false;
+      if(t<1)requestAnimationFrame(step);
+      else{isScrollAnimating=false;lastScrollEnd=performance.now();}
     }
     requestAnimationFrame(step);
   }
 
   function setupWheelScroll(){
     if(isTouch)return;
-    let wheelCooldown=false;
     scrollContainer.addEventListener('wheel',e=>{
       e.preventDefault();
-      if(isScrollAnimating||wheelCooldown)return;
-      wheelCooldown=true;
-      setTimeout(()=>{wheelCooldown=false;},850);
+      // Trackpads emit a trail of tiny, sometimes reversed-sign deltaY
+      // events as a swipe decelerates (rubber-band/momentum simulation).
+      // Reacting to those was firing a second, opposite-direction page jump
+      // right after landing - it looked like the scroll "snagged" partway
+      // and needed a second nudge to actually get there. Filter out both
+      // the noise (small deltaY) and the tail of the gesture that just
+      // finished (a short grace period keyed off the single isScrollAnimating
+      // clock instead of a second, independently-drifting timer).
+      if(isScrollAnimating||Math.abs(e.deltaY)<4||performance.now()-lastScrollEnd<300)return;
       scrollToIndex(currentSectionIndex+(e.deltaY>0?1:-1));
     },{passive:false});
   }
@@ -530,39 +552,25 @@ document.addEventListener('DOMContentLoaded',()=>{
   }
 
   // ---- custom cursor (desktop only) ----
-  // The native OS cursor is never hidden (see the plain `cursor:pointer`/
-  // `grab` rules near the top of <style>), so there's nothing that can make
-  // the pointer itself vanish. This dot is purely a decorative "OPEN" accent
-  // that only exists while hovering a specific interactive element - it
-  // never has to track fast, page-wide mouse movement, which is what kept
-  // going wrong with the old always-on full-page tracking version.
   function setupCustomCursor(){
     if(isTouch)return;
-    document.querySelectorAll('.folder, a, .dots button, .tab, .close-btn, .mac-buttons div').forEach(el=>{
-      let rafPending=false,queuedX=0,queuedY=0;
-      const place=()=>{
-        cursorDot.style.left=`${queuedX}px`;
-        cursorDot.style.top=`${queuedY}px`;
+    let queuedX=0,queuedY=0,rafPending=false;
+    // pointermove (not mousemove): folder drag calls preventDefault() on
+    // pointerdown, which per spec suppresses the synthetic mouse events
+    // (mousemove/mouseup) derived from that pointer until release - so a
+    // mousemove listener would go silent mid-drag. pointermove keeps firing.
+    document.addEventListener('pointermove',e=>{
+      queuedX=e.clientX;queuedY=e.clientY;
+      if(rafPending)return;
+      rafPending=true;
+      requestAnimationFrame(()=>{
+        cursorDot.style.transform=`translate3d(${queuedX}px, ${queuedY}px, 0) translate(-50%, -50%)`;
         rafPending=false;
-      };
-      const onMove=e=>{
-        queuedX=e.clientX;queuedY=e.clientY;
-        if(rafPending)return;
-        rafPending=true;
-        requestAnimationFrame(place);
-      };
-      el.addEventListener('pointerenter',e=>{
-        queuedX=e.clientX;queuedY=e.clientY;
-        place();
-        cursorDot.classList.add('active','hover');
-        cursorDot.textContent=el.classList.contains('folder')?'OPEN':'';
-        el.addEventListener('pointermove',onMove);
       });
-      el.addEventListener('pointerleave',()=>{
-        cursorDot.classList.remove('active','hover');
-        cursorDot.textContent='';
-        el.removeEventListener('pointermove',onMove);
-      });
+    });
+    document.querySelectorAll('.folder, a, .dots button, .tab, .close-btn, .mac-buttons div').forEach(el=>{
+      el.addEventListener('mouseenter',()=>{cursorDot.classList.add('hover');cursorDot.textContent=el.classList.contains('folder')?'OPEN':'';});
+      el.addEventListener('mouseleave',()=>{cursorDot.classList.remove('hover');cursorDot.textContent='';});
     });
   }
 
