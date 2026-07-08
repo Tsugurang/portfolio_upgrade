@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Portfolio</title>
-  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet" />
   <style>
     :root {
       --bg-light: #fafafa;
@@ -17,9 +16,9 @@
     }
     html, body { margin: 0; height: 100%; overflow: hidden; }
     body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif; background: var(--bg-light); color: var(--fg-dark); cursor: none; }
-    a, button, .folder, .tab, .close-btn, .mac-buttons div, .window-buttons div, .dots button { cursor: none; }
+    a, button, .folder, .tab, .close-btn, .mac-buttons div, .dots button { cursor: none; }
     @media (pointer: coarse) {
-      body, a, button, .folder, .tab, .close-btn, .mac-buttons div, .window-buttons div, .dots button { cursor: pointer; }
+      body, a, button, .folder, .tab, .close-btn, .mac-buttons div, .dots button { cursor: pointer; }
       .folder { cursor: grab; }
     }
 
@@ -36,11 +35,9 @@
       padding: 0 1rem;
       height: 100vh;
       box-sizing: border-box;
-      scroll-snap-align: start;
       opacity: 0;
       transform: translateY(16px);
       transition: opacity 0.5s ease-out, transform 0.5s ease-out;
-      will-change: opacity, transform;
     }
     .section.in-view { opacity: 1; transform: translateY(0); }
 
@@ -77,15 +74,6 @@
       font-style: normal;
       font-display: swap;
     }
-    @font-face {
-      font-family: 'Heading Pro Trial-Bold';
-      src: url('font/HeadingProTrial-Bold.woff2') format('woff2'),
-           url('font/HeadingProTrial-Bold.woff') format('woff');
-      font-weight: normal;
-      font-style: normal;
-      font-display: swap;
-    }
-
     .section#about {
       display: flex;
       justify-content: center;
@@ -137,7 +125,7 @@
     .mac-container { margin: 0 auto; background: var(--bg-light); border: 1px solid var(--border); border-radius: 20px; width: 90%; aspect-ratio: 16 / 9; max-height: 90vh; overflow: hidden; position: relative; display: flex; flex-direction: column; box-shadow: var(--shadow); }
     .mac-titlebar { height: 36px; background: #efefef; display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid var(--border); }
     .mac-buttons { display: flex; gap: 6px; }
-    .mac-buttons div, .window-buttons div { width: 12px; height: 12px; border-radius: 50%; }
+    .mac-buttons div { width: 12px; height: 12px; border-radius: 50%; }
     .close { background: #ff5f56; }
     .minimize { background: #ffbd2e; }
     .maximize { background: #27c93f; }
@@ -273,7 +261,7 @@
     <div class="mac-container" id="macContainer">
       <div class="mac-titlebar">
         <div class="mac-buttons"><div class="close"></div><div class="minimize"></div><div class="maximize"></div></div>
-        <div class="tab-bar"><div class="tab active" data-link="home"><i class='bx bx-home'></i></div></div>
+        <div class="tab-bar"><div class="tab active" data-link="home"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-label="home"><path d="M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z"/></svg></div></div>
       </div>
       <div class="mac-body" id="macBody">
         <div class="folder" data-link="image-viewer.html?img=Typography.png"><img src="folderp.webp" alt=""><div class="label">Typography</div></div>
@@ -335,10 +323,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   }
   function easeInOutCubic(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
 
-  // scroll-snap-type on the outer container was blocking touch scroll from
-  // reaching the nested, internally-scrollable About content on mobile, so
-  // touch devices get plain unsnapped scrolling instead (dot-nav still works
-  // via scrollToIndex, which sets scrollTop directly regardless of snap).
+  // mobile swaps the desktop free-form folder desktop for a wrapping grid
   if(isMobile)macBody.classList.add('mobile-layout');
 
   setupFolders();
@@ -641,9 +626,23 @@ document.addEventListener('DOMContentLoaded',()=>{
     // (mousemove/mouseup) derived from that pointer until release - so a
     // mousemove listener would go silent mid-drag. pointermove keeps firing.
     document.addEventListener('pointermove',e=>positionCursor(e.clientX,e.clientY));
-    document.querySelectorAll('.folder, a, .dots button, .tab, .close-btn, .mac-buttons div').forEach(el=>{
-      el.addEventListener('mouseenter',()=>{cursorDot.classList.add('hover');cursorDot.textContent=el.classList.contains('folder')?'OPEN':'';});
-      el.addEventListener('mouseleave',()=>{cursorDot.classList.remove('hover');cursorDot.textContent='';});
+    // Hover state via delegation rather than per-element listeners: work
+    // tabs (and their close buttons) are created dynamically in openTab,
+    // so anything bound only to the elements present at init would skip
+    // them and the cursor would never react over new tabs.
+    const HOVER_SELECTOR='.folder, a, .dots button, .tab, .close-btn, .mac-buttons div';
+    document.addEventListener('pointerover',e=>{
+      const el=e.target.closest(HOVER_SELECTOR);
+      if(!el)return;
+      cursorDot.classList.add('hover');
+      cursorDot.textContent=el.classList.contains('folder')?'OPEN':'';
+    });
+    document.addEventListener('pointerout',e=>{
+      const el=e.target.closest(HOVER_SELECTOR);
+      if(!el)return;
+      if(e.relatedTarget&&el.contains(e.relatedTarget))return;
+      cursorDot.classList.remove('hover');
+      cursorDot.textContent='';
     });
   }
 
