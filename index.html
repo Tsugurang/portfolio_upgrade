@@ -53,8 +53,8 @@
     @keyframes fadeUp { 0% { opacity: 0; transform: translateY(40px); } 100% { opacity: 1; transform: translateY(0); } }
     .fade-up { opacity: 0; animation: fadeUp 1s ease-out forwards; animation-delay: 0.3s; }
 
-    .cursor-dot { position: fixed; top: 0; left: 0; width: 14px; height: 14px; border-radius: 50%; background: #fff; pointer-events: none; z-index: 9999; mix-blend-mode: difference; transform: translate(-50%, -50%); transition: width 0.25s ease, height 0.25s ease, background 0.25s ease, opacity 0.15s ease; will-change: transform; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em; color: transparent; }
-    .cursor-dot.hover { width: 64px; height: 64px; background: #000; color: #fff; mix-blend-mode: normal; }
+    .cursor-dot { position: fixed; top: 0; left: 0; width: 14px; height: 14px; box-sizing: border-box; border-radius: 50%; background: #fff; border: 1.5px solid rgba(0,0,0,0.55); pointer-events: none; z-index: 9999; transform: translate(-50%, -50%); transition: width 0.25s ease, height 0.25s ease, background 0.25s ease, opacity 0.15s ease, border-color 0.25s ease; will-change: transform; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em; color: transparent; }
+    .cursor-dot.hover { width: 64px; height: 64px; background: #000; color: #fff; border-color: rgba(255,255,255,0.5); }
     @media (pointer: coarse) { .cursor-dot { display: none; } }
 
     @keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
@@ -127,7 +127,7 @@
       .about-content { grid-template-columns: 1fr; gap: 2rem; }
     }
 
-    .mac-container { margin: 0 auto; background: var(--bg-light); border: 1px solid var(--border); border-radius: 20px; width: 90%; height: 90vh; overflow: hidden; position: relative; display: flex; flex-direction: column; box-shadow: var(--shadow); }
+    .mac-container { margin: 0 auto; background: var(--bg-light); border: 1px solid var(--border); border-radius: 20px; width: 90%; aspect-ratio: 16 / 9; max-height: 90vh; overflow: hidden; position: relative; display: flex; flex-direction: column; box-shadow: var(--shadow); }
     .mac-titlebar { height: 36px; background: #efefef; display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid var(--border); }
     .mac-buttons { display: flex; gap: 6px; }
     .mac-buttons div, .window-buttons div { width: 12px; height: 12px; border-radius: 50%; }
@@ -144,49 +144,12 @@
     .tab.active { background: var(--bg-light); font-weight: bold; color: var(--fg-dark); }
     .tab .close-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; font-weight: bold; }
     .tab .close-btn:hover { background: rgba(0, 0, 0, 0.08); }
-    .frame-wrap { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 10; animation: genieOpen 0.75s cubic-bezier(.22,.61,.2,1); will-change: clip-path, opacity; }
+    .frame-wrap { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 10; transform-origin: var(--origin-x, 50%) var(--origin-y, 50%); animation: folderOpen 0.5s cubic-bezier(.34,1.56,.64,1); will-change: transform, opacity; }
     iframe.content-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background: var(--bg-light); }
-    /* Genie effect (macOS dock minimize/restore, reversed): a point at the
-       click origin blooms into a thin, bulging spindle - like smoke being
-       pulled up out of a lamp - that stretches to the full window height
-       before finally widening out to fill the whole frame. */
-    @keyframes genieOpen {
-      0% {
-        opacity: 0;
-        clip-path: polygon(
-          var(--origin-x, 50%) var(--origin-y, 100%),
-          var(--origin-x, 50%) var(--origin-y, 100%),
-          var(--origin-x, 50%) var(--origin-y, 100%),
-          var(--origin-x, 50%) var(--origin-y, 100%),
-          var(--origin-x, 50%) var(--origin-y, 100%),
-          var(--origin-x, 50%) var(--origin-y, 100%)
-        );
-      }
-      15% { opacity: 1; }
-      30% {
-        clip-path: polygon(
-          calc(var(--origin-x, 50%) - 2%) calc(var(--origin-y, 100%) - 6%),
-          calc(var(--origin-x, 50%) + 2%) calc(var(--origin-y, 100%) - 6%),
-          calc(var(--origin-x, 50%) + 6%) var(--origin-y, 100%),
-          calc(var(--origin-x, 50%) + 2%) calc(var(--origin-y, 100%) + 6%),
-          calc(var(--origin-x, 50%) - 2%) calc(var(--origin-y, 100%) + 6%),
-          calc(var(--origin-x, 50%) - 6%) var(--origin-y, 100%)
-        );
-      }
-      65% {
-        clip-path: polygon(
-          calc(var(--origin-x, 50%) - 4%) 0%,
-          calc(var(--origin-x, 50%) + 4%) 0%,
-          calc(var(--origin-x, 50%) + 16%) 50%,
-          calc(var(--origin-x, 50%) + 4%) 100%,
-          calc(var(--origin-x, 50%) - 4%) 100%,
-          calc(var(--origin-x, 50%) - 16%) 50%
-        );
-      }
-      100% {
-        opacity: 1;
-        clip-path: polygon(0% 0%, 100% 0%, 100% 50%, 100% 100%, 0% 100%, 0% 50%);
-      }
+    @keyframes folderOpen {
+      0% { opacity: 0; transform: scale(0.08); }
+      60% { opacity: 1; }
+      100% { opacity: 1; transform: scale(1); }
     }
 
     .frame-loader { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 11; background: var(--bg-light); }
