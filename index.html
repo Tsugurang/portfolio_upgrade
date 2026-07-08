@@ -58,7 +58,12 @@
        compositor-only, and a short transition on it means a dropped JS
        frame glides to the next point instead of visibly popping/vanishing. */
     .cursor-dot { position: fixed; top: 0; left: 0; width: 26px; height: 26px; box-sizing: border-box; border-radius: 50%; background: transparent; border: 2px solid rgba(0,0,0,0.6); outline: 1.5px solid rgba(255,255,255,0.55); pointer-events: none; z-index: 9999; transform: translate3d(0,0,0) translate(-50%, -50%); transition: width 0.25s ease, height 0.25s ease, background 0.25s ease, opacity 0.15s ease, border-color 0.25s ease, transform 0.08s linear; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; color: transparent; }
+    /* Two hover sizes: the big filled "OPEN" circle is reserved for the
+       large folder icons - over small controls (tabs, close buttons, nav
+       dots) a 76px solid disc completely buried the thing being pointed
+       at, so those get a modest transparent ring instead. */
     .cursor-dot.hover { width: 76px; height: 76px; background: #000; color: #fff; border-color: rgba(255,255,255,0.5); }
+    .cursor-dot.hover-sm { width: 38px; height: 38px; }
     @media (pointer: coarse) { .cursor-dot { display: none; } }
 
     @keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
@@ -634,14 +639,15 @@ document.addEventListener('DOMContentLoaded',()=>{
     document.addEventListener('pointerover',e=>{
       const el=e.target.closest(HOVER_SELECTOR);
       if(!el)return;
-      cursorDot.classList.add('hover');
-      cursorDot.textContent=el.classList.contains('folder')?'OPEN':'';
+      const isFolder=el.classList.contains('folder');
+      cursorDot.classList.add(isFolder?'hover':'hover-sm');
+      cursorDot.textContent=isFolder?'OPEN':'';
     });
     document.addEventListener('pointerout',e=>{
       const el=e.target.closest(HOVER_SELECTOR);
       if(!el)return;
       if(e.relatedTarget&&el.contains(e.relatedTarget))return;
-      cursorDot.classList.remove('hover');
+      cursorDot.classList.remove('hover','hover-sm');
       cursorDot.textContent='';
     });
   }
