@@ -7,14 +7,21 @@
     margin: 0;
     padding: 0;
     overflow-x: hidden;
-    background: #fff;
+    background: #ebebee;
   }
+  /* Comfortable reading width: long boards stretched across the whole mac
+     window looked over-magnified, so the column is capped and centered
+     with the page background filling the sides. The parent page adds
+     .max to <body> while the mac window is fullscreen, lifting the cap. */
   img {
     display: block;
     width: 100%;
-    max-width: 100%;
+    max-width: 1000px;
     height: auto;
+    margin: 0 auto;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.12);
   }
+  body.max img { max-width: none; box-shadow: none; }
 </style>
 
 </head>

@@ -4,8 +4,11 @@
   <meta charset="UTF-8">
   <title>Image Viewer</title>
   <style>
-    body { background: #ffffff; margin: 0; text-align: center; }
-    img { display: block; width: 100%; max-width: 100%; height: auto; }
+    body { background: #ebebee; margin: 0; text-align: center; }
+    /* Capped, centered column (background fills the sides); the parent adds
+       .max to <body> while the mac window is fullscreen to lift the cap. */
+    img { display: block; width: 100%; max-width: 1000px; height: auto; margin: 0 auto; box-shadow: 0 0 40px rgba(0, 0, 0, 0.12); }
+    body.max img { max-width: none; box-shadow: none; }
   </style>
 </head>
 <body>
