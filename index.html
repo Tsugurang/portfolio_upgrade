@@ -132,20 +132,28 @@
        over the whole viewport, yellow puts it back. Escape also exits.
        While fullscreen the viewers inside also lift their comfortable-width
        cap (see setViewerMax) so the work truly uses the entire screen. */
-    .mac-container.fullscreen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; max-height: none; aspect-ratio: auto; border-radius: 0; border: none; margin: 0; z-index: 100; animation: zoomIn 0.35s ease-out; }
-    @keyframes zoomIn { from { transform: scale(0.96); opacity: 0.5; } to { transform: scale(1); opacity: 1; } }
+    .mac-container.fullscreen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; max-height: none; aspect-ratio: auto; border-radius: 0; border: none; margin: 0; z-index: 100; }
+    /* Grow/shrink between the small window and fullscreen is driven from JS
+       (see animateFullscreenTransform) with a FLIP transform - width/height
+       can't be transitioned across this layout change (relative+aspect-ratio
+       vs fixed+100vw/100vh), so the visual size actually changes only if a
+       transform is animated back to identity from the pre-toggle size. */
+    .mac-container.flip-transition { transition: transform 0.45s cubic-bezier(.16,.8,.2,1); }
     .mac-titlebar { height: 36px; background: #efefef; display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid var(--border); }
     .mac-buttons { position: relative; display: flex; gap: 6px; }
-    .mac-buttons div { width: 12px; height: 12px; border-radius: 50%; }
+    .mac-buttons > .close, .mac-buttons > .minimize, .mac-buttons > .maximize { width: 12px; height: 12px; border-radius: 50%; }
     .close { background: #ff5f56; }
     .minimize { background: #ffbd2e; }
     .maximize { background: #27c93f; }
     /* Coach mark pointing at the minimize button, shown once when the
        Projects section auto-expands to fullscreen for the first time, so
-       there's an obvious way back to the normal size. */
-    .coach-mark { position: absolute; top: 26px; left: 18px; transform: translate(-50%, -6px); background: #1a1a1a; color: #fff; font-size: 0.78rem; font-weight: 500; letter-spacing: -0.01em; padding: 7px 12px; border-radius: 8px; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,0.3); opacity: 0; pointer-events: none; transition: opacity 0.3s ease, transform 0.3s ease; z-index: 5; }
-    .coach-mark::before { content: ''; position: absolute; top: -4px; left: 50%; transform: translateX(-50%) rotate(45deg); width: 8px; height: 8px; background: #1a1a1a; }
-    .coach-mark.show { opacity: 1; transform: translate(-50%, 0); }
+       there's an obvious way back to the normal size. Anchored by its
+       left edge (not centered) - mac-container clips overflow, and
+       centering on the button pushed the tooltip's left half past the
+       container's left edge where it was silently clipped off. */
+    .coach-mark { position: absolute; top: 26px; left: 16px; transform: translateY(-6px); background: #1a1a1a; color: #fff; font-size: 0.78rem; font-weight: 500; letter-spacing: -0.01em; padding: 7px 12px; border-radius: 8px; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,0.3); opacity: 0; pointer-events: none; transition: opacity 0.3s ease, transform 0.3s ease; z-index: 20; }
+    .coach-mark::before { content: ''; position: absolute; top: -4px; left: 8px; transform: rotate(45deg); width: 8px; height: 8px; background: #1a1a1a; }
+    .coach-mark.show { opacity: 1; transform: translateY(0); }
     .mac-body { position: relative; width: 100%; height: 100%; padding: 3rem 4rem; box-sizing: border-box; }
     .folder { position: absolute; text-align: center; user-select: none; transition: transform 0.2s ease-out; }
     .folder img { width: 130px; filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.12)); transition: transform 0.25s ease, filter 0.25s ease; animation: floaty 3.4s ease-in-out infinite; }
@@ -452,8 +460,36 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
   }
 
+  // FLIP: record the window's rect before the fullscreen class flips its
+  // layout mode (relative+aspect-ratio <-> fixed+100vw/100vh - not
+  // something width/height can transition across), apply the new layout
+  // instantly, then counter-transform back to the old rect and animate
+  // that transform to identity. Reads as the window actually growing from
+  // (or shrinking back to) its real on-screen size, not a static box just
+  // appearing with a token opacity/scale flicker.
+  function animateFullscreenTransform(before){
+    const after=macContainer.getBoundingClientRect();
+    const scaleX=before.width/after.width;
+    const scaleY=before.height/after.height;
+    const dx=(before.left+before.width/2)-(after.left+after.width/2);
+    const dy=(before.top+before.height/2)-(after.top+after.height/2);
+    macContainer.classList.remove('flip-transition');
+    macContainer.style.transform=`translate(${dx}px,${dy}px) scale(${scaleX},${scaleY})`;
+    macContainer.getBoundingClientRect(); // force reflow so the transform above applies before transitioning
+    macContainer.classList.add('flip-transition');
+    requestAnimationFrame(()=>{macContainer.style.transform='';});
+    clearTimeout(animateFullscreenTransform.cleanupTimer);
+    animateFullscreenTransform.cleanupTimer=setTimeout(()=>{
+      macContainer.classList.remove('flip-transition');
+      macContainer.style.transform='';
+    },500);
+  }
+
   function setFullscreen(on){
+    if(on===macContainer.classList.contains('fullscreen'))return;
+    const before=macContainer.getBoundingClientRect();
     macContainer.classList.toggle('fullscreen',on);
+    animateFullscreenTransform(before);
     setViewerMax(on);
     if(!on)hideCoachMark();
   }
