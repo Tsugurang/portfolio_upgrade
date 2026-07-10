@@ -135,16 +135,11 @@
     }
 
     .mac-container { margin: 0 auto; background: var(--bg-light); border: 1px solid var(--border); border-radius: 20px; width: 90%; aspect-ratio: 16 / 9; max-height: 90vh; overflow: hidden; position: relative; display: flex; flex-direction: column; box-shadow: var(--shadow); }
-    /* Fullscreen: green grows the window to fill the viewport, yellow
-       shrinks it back. Escape also exits. Just two effects, nothing else:
-       transform:scale() grows/shrinks the window (driven from JS in
-       setFullscreen - scale() rescales the whole rendered window as one
-       piece, so it's unmistakably the same window, not a new box), and
-       the backdrop dims the rest of the page so the resize reads as the
-       clear focal point. */
+    /* Fullscreen: green snaps the window to fill the viewport, yellow
+       snaps it back. Escape also exits. No resize animation on the window
+       itself - just the backdrop fading in/out behind it. */
     .mac-container.fullscreen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; max-height: none; aspect-ratio: auto; border-radius: 0; border: none; margin: 0; z-index: 100; }
-    .mac-container.fs-anim { transition: transform 1s cubic-bezier(.2,.7,.2,1); }
-    .fs-backdrop { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 99; transition: opacity 1s ease; }
+    .fs-backdrop { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 99; transition: opacity 0.4s ease; }
     .fs-backdrop.show { opacity: 0.55; }
     .mac-titlebar { height: 46px; background: #efefef; display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid var(--border); }
     .mac-buttons { position: relative; display: flex; gap: 6px; }
@@ -152,6 +147,15 @@
     .close { background: #ff5f56; }
     .minimize { background: #ffbd2e; }
     .maximize { background: #27c93f; }
+    /* Coach mark pointing at the minimize button, shown once when the
+       Projects section auto-expands to fullscreen for the first time, so
+       there's an obvious way back to the normal size. Anchored by its
+       left edge (not centered) - mac-container clips overflow, and
+       centering on the button pushed the tooltip's left half past the
+       container's left edge where it was silently clipped off. */
+    .coach-mark { position: absolute; top: 26px; left: 16px; transform: translateY(-6px); background: #1a1a1a; color: #fff; font-size: 0.78rem; font-weight: 500; letter-spacing: -0.01em; padding: 7px 12px; border-radius: 8px; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,0.3); opacity: 0; pointer-events: none; transition: opacity 0.3s ease, transform 0.3s ease; z-index: 20; }
+    .coach-mark::before { content: ''; position: absolute; top: -4px; left: 8px; transform: rotate(45deg); width: 8px; height: 8px; background: #1a1a1a; }
+    .coach-mark.show { opacity: 1; transform: translateY(0); }
     .mac-body { position: relative; width: 100%; height: 100%; padding: 3rem 4rem; box-sizing: border-box; }
     .folder { position: absolute; text-align: center; user-select: none; transition: transform 0.2s ease-out; }
     .folder img { width: 130px; filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.12)); transition: transform 0.25s ease, filter 0.25s ease; animation: floaty 3.4s ease-in-out infinite; }
@@ -289,6 +293,7 @@
           <div class="close"></div>
           <div class="minimize"></div>
           <div class="maximize"></div>
+          <div class="coach-mark" id="coachMark">여기서 원래 크기로 돌아갈 수 있어요</div>
         </div>
         <div class="tab-bar"><div class="tab active" data-link="home"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-label="home"><path d="M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z"/></svg></div></div>
       </div>
@@ -324,6 +329,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const tabBar=document.querySelector('.tab-bar');
   const cursorDot=document.getElementById('cursorDot');
   const fsBackdrop=document.getElementById('fsBackdrop');
+  const coachMark=document.getElementById('coachMark');
   const sections=Array.from(document.querySelectorAll('.scroll-container > .section'));
 
   const tabs={};
@@ -339,6 +345,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   let loaderTimer=null;
   let forwardWheelDelta=null;
   let projectsAutoFullscreenDone=false;
+  let coachMarkTimer=null;
 
   function clamp(val,min,max){return Math.max(min,Math.min(max,val));}
 
@@ -477,48 +484,32 @@ document.addEventListener('DOMContentLoaded',()=>{
   // whichever the user last actually chose instead of always resetting to
   // mini, which read as the fullscreen toggle just not sticking.
   let userWantsFullscreen=false;
-  let fsAnimTimer=null;
 
-  function clearMacRect(){
-    macContainer.classList.remove('fs-anim');
-    macContainer.style.transform='';
-  }
-
-  // animate=true: transform:scale() transitions (~1s) between 1 (full
-  // viewport) and 0.45 (noticeably smaller - growing from exactly 100%
-  // read as too subtle to register as "growing"), and the backdrop dims
-  // in behind it. Just those two effects. scale() rescales the whole
-  // rendered window as one piece, so the small state still visibly shows
-  // the real titlebar/tabs/folders, just shrunk. animate=false snaps
-  // instantly - used for the silent exit/restore when scrolling between
-  // sections, which must not replay the show-piece animation every time.
+  // No resize animation on the window itself - it snaps to/from fullscreen
+  // instantly. Just the backdrop fades in/out behind it (invisible while
+  // opening, since the now-fullscreen window covers it instantly anyway;
+  // visible while closing, as the small window reappears and the backdrop
+  // fades from dim back to clear behind it). animate=false (used for the
+  // silent exit/restore when scrolling between sections) skips even that
+  // fade, since it must not draw attention every time.
   function setFullscreen(on,persistPreference,animate){
     if(persistPreference)userWantsFullscreen=on;
     if(on===macContainer.classList.contains('fullscreen'))return;
-    clearTimeout(fsAnimTimer);
-    clearMacRect();
-    fsBackdrop.classList.remove('show');
-    if(!animate){
-      macContainer.classList.toggle('fullscreen',on);
-    }else if(on){
-      macContainer.classList.add('fullscreen');
-      macContainer.style.transform='scale(0.45)';
-      macContainer.getBoundingClientRect(); // commit the shrunk state before enabling the transition
-      macContainer.classList.add('fs-anim');
-      fsBackdrop.classList.add('show');
-      requestAnimationFrame(()=>{macContainer.style.transform='';});
-      fsAnimTimer=setTimeout(()=>{clearMacRect();fsBackdrop.classList.remove('show');},1050);
-    }else{
-      macContainer.classList.add('fs-anim');
-      fsBackdrop.classList.add('show');
-      requestAnimationFrame(()=>{macContainer.style.transform='scale(0.45)';});
-      fsAnimTimer=setTimeout(()=>{
-        macContainer.classList.remove('fullscreen');
-        clearMacRect();
-        fsBackdrop.classList.remove('show');
-      },1050);
-    }
+    macContainer.classList.toggle('fullscreen',on);
+    fsBackdrop.classList.toggle('show',animate&&on);
     setViewerMax(on);
+    if(!on)hideCoachMark();
+  }
+
+  function showCoachMark(){
+    coachMark.classList.add('show');
+    clearTimeout(coachMarkTimer);
+    coachMarkTimer=setTimeout(hideCoachMark,5000);
+  }
+
+  function hideCoachMark(){
+    coachMark.classList.remove('show');
+    clearTimeout(coachMarkTimer);
   }
 
   function setupWindowButtons(){
@@ -699,7 +690,7 @@ document.addEventListener('DOMContentLoaded',()=>{
               // only once per visit, with a short delay so it doesn't
               // collide with the section's own fade-in transition.
               projectsAutoFullscreenDone=true;
-              setTimeout(()=>{setFullscreen(true,true,true);},500);
+              setTimeout(()=>{setFullscreen(true,true,true);showCoachMark();},500);
             }else if(userWantsFullscreen&&!macContainer.classList.contains('fullscreen')){
               // Scrolling back after having left fullscreen mid-visit (see
               // the wheel handler) - restore it instead of always landing
