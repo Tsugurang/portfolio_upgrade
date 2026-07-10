@@ -149,7 +149,12 @@
        the same window stretching, and only when animation is requested. */
     .mac-container.fullscreen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; max-height: none; aspect-ratio: auto; border-radius: 0; border: none; margin: 0; z-index: 100; }
     .mac-container.fs-anim { transition: left 1s cubic-bezier(.2,.7,.2,1), top 1s cubic-bezier(.2,.7,.2,1), width 1s cubic-bezier(.2,.7,.2,1), height 1s cubic-bezier(.2,.7,.2,1), border-radius 1s ease; }
-    .mac-titlebar { height: 36px; background: #efefef; display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid var(--border); }
+    /* Dims the rest of the page under the growing/shrinking window so the
+       size change reads as the clear focal point instead of competing with
+       everything else still on screen behind it. */
+    .fs-backdrop { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 99; transition: opacity 1s ease; }
+    .fs-backdrop.show { opacity: 0.55; }
+    .mac-titlebar { height: 46px; background: #efefef; display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid var(--border); }
     .mac-buttons { position: relative; display: flex; gap: 6px; }
     .mac-buttons > .close, .mac-buttons > .minimize, .mac-buttons > .maximize { width: 12px; height: 12px; border-radius: 50%; }
     .close { background: #ff5f56; }
@@ -169,12 +174,12 @@
     .folder img { width: 130px; filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.12)); transition: transform 0.25s ease, filter 0.25s ease; animation: floaty 3.4s ease-in-out infinite; }
     .folder:hover img { animation-play-state: paused; transform: translateY(-6px); filter: drop-shadow(0px 12px 16px rgba(0,0,0,0.18)); }
     .folder .label { color: var(--fg-muted); font-size: 0.85rem; letter-spacing: 0.02em; margin-top: 0.6rem; }
-    .tab-bar { display: flex; gap: 6px; margin-left: 20px; }
-    .tab { background: #e2e2e2; padding: 5px 10px; border-radius: 4px 4px 0 0; color: var(--fg-muted); font-size: 0.85rem; display: flex; align-items: center; gap: 4px; transition: background 0.2s ease, color 0.2s ease; }
+    .tab-bar { display: flex; gap: 8px; margin-left: 20px; }
+    .tab { background: #e2e2e2; padding: 9px 16px; border-radius: 6px 6px 0 0; color: var(--fg-muted); font-size: 0.95rem; display: flex; align-items: center; gap: 6px; transition: background 0.2s ease, color 0.2s ease; }
     .tab:hover { background: #d2d2d2; color: var(--fg-dark); }
     .tab.active { background: var(--bg-light); font-weight: bold; color: var(--fg-dark); }
     .tab.active:hover { background: #f1f1f1; }
-    .tab .close-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; font-weight: bold; }
+    .tab .close-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 5px; font-weight: bold; }
     .tab .close-btn:hover { background: rgba(0, 0, 0, 0.08); }
     /* The pop-in animation is gated behind .pop instead of running
        unconditionally, so it only plays once the iframe actually finishes
@@ -231,6 +236,7 @@
 </head>
 <body>
 <div class="cursor-dot" id="cursorDot"></div>
+<div class="fs-backdrop" id="fsBackdrop"></div>
 <div class="scroll-container" id="scrollContainer">
   <div class="section" id="home" style="display: flex; align-items: center; justify-content: flex-start; padding-left: 8vw; background: linear-gradient(to bottom, transparent 65%, var(--bg-light) 100%), radial-gradient(circle at center, #007bff, #00c6ff, #d9faff); text-align: left; overflow: hidden;">
     <div class="fade-up" style="position: absolute; top: 20%; left: 8vw; transform: translateY(-50%);">
@@ -336,6 +342,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const tabBar=document.querySelector('.tab-bar');
   const cursorDot=document.getElementById('cursorDot');
   const coachMark=document.getElementById('coachMark');
+  const fsBackdrop=document.getElementById('fsBackdrop');
   const sections=Array.from(document.querySelectorAll('.scroll-container > .section'));
 
   const tabs={};
@@ -508,25 +515,32 @@ document.addEventListener('DOMContentLoaded',()=>{
   }
 
   // animate=true: the window's actual rect is transitioned (~1s) between
-  // its real in-page position and the full viewport, so it's visibly the
-  // same window stretching out / settling back. animate=false snaps
-  // instantly - used for the silent exit/restore when scrolling between
-  // sections, which must not replay the show-piece animation every time.
+  // the full viewport and a starting box noticeably smaller than the real
+  // window (45% of it, centered on the same spot) - growing from exactly
+  // the real size read as too subtle to notice, so the start point is
+  // deliberately exaggerated smaller. animate=false snaps instantly -
+  // used for the silent exit/restore when scrolling between sections,
+  // which must not replay the show-piece animation every time.
   function setFullscreen(on,persistPreference,animate){
     if(persistPreference)userWantsFullscreen=on;
     if(on===macContainer.classList.contains('fullscreen'))return;
     clearTimeout(fsAnimTimer);
     clearMacRect();
+    fsBackdrop.classList.remove('show');
     if(!animate){
       macContainer.classList.toggle('fullscreen',on);
     }else if(on){
       const r=macContainer.getBoundingClientRect();
+      const shrink=0.45;
+      const startW=r.width*shrink,startH=r.height*shrink;
+      const startLeft=r.left+(r.width-startW)/2,startTop=r.top+(r.height-startH)/2;
       macContainer.classList.add('fullscreen');
-      setMacRect(r.left,r.top,r.width,r.height,20);
+      setMacRect(startLeft,startTop,startW,startH,20);
       macContainer.getBoundingClientRect(); // commit the small rect before enabling the transition
       macContainer.classList.add('fs-anim');
+      fsBackdrop.classList.add('show');
       requestAnimationFrame(()=>setMacRect(0,0,window.innerWidth,window.innerHeight,0));
-      fsAnimTimer=setTimeout(clearMacRect,1050);
+      fsAnimTimer=setTimeout(()=>{clearMacRect();fsBackdrop.classList.remove('show');},1050);
     }else{
       // measure where the window will sit in normal flow (class off/on
       // within one frame - nothing paints in between)
@@ -536,10 +550,12 @@ document.addEventListener('DOMContentLoaded',()=>{
       setMacRect(0,0,window.innerWidth,window.innerHeight,0);
       macContainer.getBoundingClientRect();
       macContainer.classList.add('fs-anim');
+      fsBackdrop.classList.add('show');
       requestAnimationFrame(()=>setMacRect(target.left,target.top,target.width,target.height,20));
       fsAnimTimer=setTimeout(()=>{
         macContainer.classList.remove('fullscreen');
         clearMacRect();
+        fsBackdrop.classList.remove('show');
       },1050);
     }
     setViewerMax(on);
