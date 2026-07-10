@@ -135,17 +135,20 @@
     }
 
     .mac-container { margin: 0 auto; background: var(--bg-light); border: 1px solid var(--border); border-radius: 20px; width: 90%; aspect-ratio: 16 / 9; max-height: 90vh; overflow: hidden; position: relative; display: flex; flex-direction: column; box-shadow: var(--shadow); }
-    /* Easter egg (real macOS behavior): green zooms the window edge-to-edge
+    /* Fullscreen (real macOS behavior): green zooms the window edge-to-edge
        over the whole viewport, yellow puts it back. Escape also exits.
        While fullscreen the viewers inside also lift their comfortable-width
        cap (see setViewerMax) so the work truly uses the entire screen.
-       Grows from half the viewport, centered, rather than tracking the
-       small window's real on-screen position/size (tried that as a FLIP
-       transform - the small window's actual aspect ratio and off-center
-       position made the motion read as a new box materializing and
-       jumping into place, not the same window growing). */
-    .mac-container.fullscreen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; max-height: none; aspect-ratio: auto; border-radius: 0; border: none; margin: 0; z-index: 100; animation: growFullscreen 0.7s cubic-bezier(.22,.7,.24,1); }
-    @keyframes growFullscreen { from { transform: scale(0.5); } to { transform: scale(1); } }
+       No animation on the class itself: earlier versions animated here,
+       which replayed on every class toggle (every return to the Projects
+       section) and, because the layout snaps to full size in the same
+       frame, flashed one full-size frame first - reading as a brand-new
+       window materializing. The grow/shrink is now driven from JS
+       (setFullscreen) by transitioning the window's actual rect between
+       its real in-page position and the full viewport, so it's visibly
+       the same window stretching, and only when animation is requested. */
+    .mac-container.fullscreen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; max-height: none; aspect-ratio: auto; border-radius: 0; border: none; margin: 0; z-index: 100; }
+    .mac-container.fs-anim { transition: left 1s cubic-bezier(.2,.7,.2,1), top 1s cubic-bezier(.2,.7,.2,1), width 1s cubic-bezier(.2,.7,.2,1), height 1s cubic-bezier(.2,.7,.2,1), border-radius 1s ease; }
     .mac-titlebar { height: 36px; background: #efefef; display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid var(--border); }
     .mac-buttons { position: relative; display: flex; gap: 6px; }
     .mac-buttons > .close, .mac-buttons > .minimize, .mac-buttons > .maximize { width: 12px; height: 12px; border-radius: 50%; }
@@ -167,8 +170,10 @@
     .folder:hover img { animation-play-state: paused; transform: translateY(-6px); filter: drop-shadow(0px 12px 16px rgba(0,0,0,0.18)); }
     .folder .label { color: var(--fg-muted); font-size: 0.85rem; letter-spacing: 0.02em; margin-top: 0.6rem; }
     .tab-bar { display: flex; gap: 6px; margin-left: 20px; }
-    .tab { background: #e2e2e2; padding: 5px 10px; border-radius: 4px 4px 0 0; color: var(--fg-muted); font-size: 0.85rem; display: flex; align-items: center; gap: 4px; }
+    .tab { background: #e2e2e2; padding: 5px 10px; border-radius: 4px 4px 0 0; color: var(--fg-muted); font-size: 0.85rem; display: flex; align-items: center; gap: 4px; transition: background 0.2s ease, color 0.2s ease; }
+    .tab:hover { background: #d2d2d2; color: var(--fg-dark); }
     .tab.active { background: var(--bg-light); font-weight: bold; color: var(--fg-dark); }
+    .tab.active:hover { background: #f1f1f1; }
     .tab .close-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; font-weight: bold; }
     .tab .close-btn:hover { background: rgba(0, 0, 0, 0.08); }
     /* The pop-in animation is gated behind .pop instead of running
@@ -458,11 +463,21 @@ document.addEventListener('DOMContentLoaded',()=>{
   // (body:not(.max) img { max-width: ... } in each viewer file); while the
   // mac window is fullscreen that cap is lifted via a .max class on each
   // same-origin iframe body so the work genuinely fills the whole screen.
+  // The width change reflows each viewer's (very tall) document, which
+  // used to leave scrollTop pointing at a different part of the work -
+  // reading position is preserved as a ratio across the toggle instead.
   function setViewerMax(on){
     Object.values(iframes).forEach(wrap=>{
       try{
-        const body=wrap.querySelector('iframe').contentDocument.body;
-        if(body)body.classList.toggle('max',on);
+        const doc=wrap.querySelector('iframe').contentDocument;
+        const body=doc.body;
+        if(!body||body.classList.contains('max')===on)return;
+        const root=doc.scrollingElement||doc.documentElement;
+        const range=root.scrollHeight-root.clientHeight;
+        const ratio=range>0?root.scrollTop/range:0;
+        body.classList.toggle('max',on);
+        const newRange=root.scrollHeight-root.clientHeight;
+        if(newRange>0)root.scrollTop=ratio*newRange;
       }catch(e){}
     });
   }
@@ -475,11 +490,58 @@ document.addEventListener('DOMContentLoaded',()=>{
   // whichever the user last actually chose instead of always resetting to
   // mini, which read as the fullscreen toggle just not sticking.
   let userWantsFullscreen=false;
+  let fsAnimTimer=null;
 
-  function setFullscreen(on,persistPreference){
+  function setMacRect(left,top,width,height,radius){
+    macContainer.style.left=left+'px';
+    macContainer.style.top=top+'px';
+    macContainer.style.width=width+'px';
+    macContainer.style.height=height+'px';
+    macContainer.style.borderRadius=radius+'px';
+  }
+
+  function clearMacRect(){
+    macContainer.classList.remove('fs-anim');
+    macContainer.style.left=macContainer.style.top='';
+    macContainer.style.width=macContainer.style.height='';
+    macContainer.style.borderRadius='';
+  }
+
+  // animate=true: the window's actual rect is transitioned (~1s) between
+  // its real in-page position and the full viewport, so it's visibly the
+  // same window stretching out / settling back. animate=false snaps
+  // instantly - used for the silent exit/restore when scrolling between
+  // sections, which must not replay the show-piece animation every time.
+  function setFullscreen(on,persistPreference,animate){
     if(persistPreference)userWantsFullscreen=on;
     if(on===macContainer.classList.contains('fullscreen'))return;
-    macContainer.classList.toggle('fullscreen',on);
+    clearTimeout(fsAnimTimer);
+    clearMacRect();
+    if(!animate){
+      macContainer.classList.toggle('fullscreen',on);
+    }else if(on){
+      const r=macContainer.getBoundingClientRect();
+      macContainer.classList.add('fullscreen');
+      setMacRect(r.left,r.top,r.width,r.height,20);
+      macContainer.getBoundingClientRect(); // commit the small rect before enabling the transition
+      macContainer.classList.add('fs-anim');
+      requestAnimationFrame(()=>setMacRect(0,0,window.innerWidth,window.innerHeight,0));
+      fsAnimTimer=setTimeout(clearMacRect,1050);
+    }else{
+      // measure where the window will sit in normal flow (class off/on
+      // within one frame - nothing paints in between)
+      macContainer.classList.remove('fullscreen');
+      const target=macContainer.getBoundingClientRect();
+      macContainer.classList.add('fullscreen');
+      setMacRect(0,0,window.innerWidth,window.innerHeight,0);
+      macContainer.getBoundingClientRect();
+      macContainer.classList.add('fs-anim');
+      requestAnimationFrame(()=>setMacRect(target.left,target.top,target.width,target.height,20));
+      fsAnimTimer=setTimeout(()=>{
+        macContainer.classList.remove('fullscreen');
+        clearMacRect();
+      },1050);
+    }
     setViewerMax(on);
     if(!on)hideCoachMark();
   }
@@ -496,10 +558,10 @@ document.addEventListener('DOMContentLoaded',()=>{
   }
 
   function setupWindowButtons(){
-    macContainer.querySelector('.maximize').addEventListener('click',()=>setFullscreen(true,true));
-    macContainer.querySelector('.minimize').addEventListener('click',()=>setFullscreen(false,true));
+    macContainer.querySelector('.maximize').addEventListener('click',()=>setFullscreen(true,true,true));
+    macContainer.querySelector('.minimize').addEventListener('click',()=>setFullscreen(false,true,true));
     document.addEventListener('keydown',e=>{
-      if(e.key==='Escape')setFullscreen(false,true);
+      if(e.key==='Escape')setFullscreen(false,true,true);
     });
   }
 
@@ -673,12 +735,12 @@ document.addEventListener('DOMContentLoaded',()=>{
               // only once per visit, with a short delay so it doesn't
               // collide with the section's own fade-in transition.
               projectsAutoFullscreenDone=true;
-              setTimeout(()=>{setFullscreen(true,true);showCoachMark();},500);
+              setTimeout(()=>{setFullscreen(true,true,true);showCoachMark();},500);
             }else if(userWantsFullscreen&&!macContainer.classList.contains('fullscreen')){
               // Scrolling back after having left fullscreen mid-visit (see
               // the wheel handler) - restore it instead of always landing
               // back in mini mode, which read as the toggle not sticking.
-              setFullscreen(true,false);
+              setFullscreen(true,false,false);
             }
           }
         }
@@ -736,7 +798,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       // which read as scrolling away from Projects being broken). Not
       // persisted as a preference change - scrolling back to Projects
       // restores fullscreen if that's genuinely what the user had chosen.
-      if(macContainer.classList.contains('fullscreen'))setFullscreen(false,false);
+      if(macContainer.classList.contains('fullscreen'))setFullscreen(false,false,false);
       scrollToIndex(currentSectionIndex+(deltaY>0?1:-1));
     }
     forwardWheelDelta=handleDelta;
