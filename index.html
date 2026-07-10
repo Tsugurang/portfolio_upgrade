@@ -495,8 +495,23 @@ document.addEventListener('DOMContentLoaded',()=>{
   // the backdrop "on" underneath it just risks a flash of black if the two
   // ever fall out of sync (e.g. an instant, unanimated exit).
   function updateBackdrop(){
+    // Also gated on the scroll having actually settled: the observer's 50%
+    // threshold fires mid-scroll, while the page is still visibly moving,
+    // and popping the backdrop on right then read as a black flash before
+    // the section had even finished arriving. scrollToIndex re-checks this
+    // once the scroll animation completes so it still shows once relevant.
     const onProjects=sections[currentSectionIndex]&&sections[currentSectionIndex].id==='projects';
-    fsBackdrop.classList.toggle('show',onProjects&&!macContainer.classList.contains('fullscreen'));
+    fsBackdrop.classList.toggle('show',onProjects&&!macContainer.classList.contains('fullscreen')&&!isScrollAnimating);
+  }
+
+  // Runs cb immediately if the eased scroll (scrollToIndex) isn't currently
+  // animating, otherwise waits for it to finish first.
+  function whenScrollSettled(cb){
+    if(!isScrollAnimating){cb();return;}
+    const check=()=>{
+      if(!isScrollAnimating)cb();else requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
   }
 
   function clearFsInlineStyles(){
@@ -765,10 +780,15 @@ document.addEventListener('DOMContentLoaded',()=>{
               // First time the Projects section settles into view, auto-
               // expand the mac window to fullscreen (same effect as the
               // green button) so the work is never seen cramped by default -
-              // only once per visit, with a short delay so it doesn't
-              // collide with the section's own fade-in transition.
+              // only once per visit. Waits for the scroll to actually finish
+              // (the 50% threshold fires mid-scroll) before the short pause
+              // and grow, so the mini view + backdrop only appear once the
+              // page has stopped moving, not mid-flight.
               projectsAutoFullscreenDone=true;
-              setTimeout(()=>{setFullscreen(true,true,true);showCoachMark();},500);
+              whenScrollSettled(()=>{
+                updateBackdrop();
+                setTimeout(()=>{setFullscreen(true,true,true);showCoachMark();},500);
+              });
             }else if(userWantsFullscreen&&!macContainer.classList.contains('fullscreen')){
               // Scrolling back after having left fullscreen mid-visit (see
               // the wheel handler) - restore it instead of always landing
@@ -807,7 +827,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     // notices it's been superseded and stops touching scrollTop, instead of
     // two rAF loops fighting over it and making the scroll look stuck.
     const myToken=++scrollToken;
-    if(Math.abs(distance)<1){isScrollAnimating=false;lastScrollEnd=performance.now();return;}
+    if(Math.abs(distance)<1){isScrollAnimating=false;lastScrollEnd=performance.now();updateBackdrop();return;}
     isScrollAnimating=true;
     const duration=850;
     const startTime=performance.now();
@@ -816,7 +836,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       const t=Math.min((now-startTime)/duration,1);
       scrollContainer.scrollTop=startY+distance*easeInOutCubic(t);
       if(t<1)requestAnimationFrame(step);
-      else{isScrollAnimating=false;lastScrollEnd=performance.now();}
+      else{isScrollAnimating=false;lastScrollEnd=performance.now();updateBackdrop();}
     }
     requestAnimationFrame(step);
   }
