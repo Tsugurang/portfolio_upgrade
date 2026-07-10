@@ -548,7 +548,15 @@ document.addEventListener('DOMContentLoaded',()=>{
 
     clearFsInlineStyles();
     macContainer.classList.toggle('fullscreen',on);
-    updateBackdrop();
+    // Growing: leave the backdrop as-is (already dark, from mini mode) for
+    // the whole motion, only clearing it once actually fullscreen (in the
+    // setTimeout below) - turning it off in sync with the grow made it fade
+    // back to nothing before the window had finished expanding, showing a
+    // sliver of the plain page background at the edges instead of staying
+    // dark. Shrinking is the mirror case and doesn't have this problem
+    // (fading dark IN while shrinking never exposes anything lighter), so
+    // it updates immediately.
+    if(!on)updateBackdrop();
 
     const lastRect=macContainer.getBoundingClientRect();
     const lastRadius=getComputedStyle(macContainer).borderRadius;
@@ -582,6 +590,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       if(token!==fsAnimToken)return;
       clearFsInlineStyles();
       setViewerMax(on);
+      if(on)updateBackdrop();
     },FS_DURATION+50);
   }
 
