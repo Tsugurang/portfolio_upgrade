@@ -40,6 +40,13 @@
       transition: opacity 0.5s ease-out, transform 0.5s ease-out;
     }
     .section.in-view { opacity: 1; transform: translateY(0); }
+    /* Any transform on an ancestor - even an identity translateY(0) - makes
+       it the containing block for position:fixed descendants instead of
+       the viewport. #projects gets translateY(0) once in-view, which was
+       silently breaking the fullscreen mac window: 100vw/100vh/scale(0.5)
+       were all computing against this section's box instead of the real
+       screen, not the true center it looked like it should be. */
+    #projects, #projects.in-view { transform: none; }
 
     .dots { position: fixed; right: 2rem; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 14px; z-index: 50; }
     .dots button { width: 8px; height: 8px; padding: 0; border-radius: 50%; border: 1.5px solid var(--fg-muted); background: transparent; transition: background 0.25s ease, border-color 0.25s ease, transform 0.25s ease; }
@@ -460,7 +467,17 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
   }
 
-  function setFullscreen(on){
+  // userWantsFullscreen tracks the user's actual preference, separate from
+  // the class toggle: scrolling away from Projects while fullscreen exits
+  // it visually (so the next section is actually visible) without treating
+  // that as "the user chose mini mode" - only an explicit click on
+  // minimize/Escape does that. Scrolling back to Projects re-applies
+  // whichever the user last actually chose instead of always resetting to
+  // mini, which read as the fullscreen toggle just not sticking.
+  let userWantsFullscreen=false;
+
+  function setFullscreen(on,persistPreference){
+    if(persistPreference)userWantsFullscreen=on;
     if(on===macContainer.classList.contains('fullscreen'))return;
     macContainer.classList.toggle('fullscreen',on);
     setViewerMax(on);
@@ -479,10 +496,10 @@ document.addEventListener('DOMContentLoaded',()=>{
   }
 
   function setupWindowButtons(){
-    macContainer.querySelector('.maximize').addEventListener('click',()=>setFullscreen(true));
-    macContainer.querySelector('.minimize').addEventListener('click',()=>setFullscreen(false));
+    macContainer.querySelector('.maximize').addEventListener('click',()=>setFullscreen(true,true));
+    macContainer.querySelector('.minimize').addEventListener('click',()=>setFullscreen(false,true));
     document.addEventListener('keydown',e=>{
-      if(e.key==='Escape')setFullscreen(false);
+      if(e.key==='Escape')setFullscreen(false,true);
     });
   }
 
@@ -648,14 +665,21 @@ document.addEventListener('DOMContentLoaded',()=>{
           dotButtons.forEach(b=>b.classList.remove('active'));
           dotButtons[idx].classList.add('active');
           dotsNav.classList.toggle('on-dark',entry.target.id==='contact');
-          // First time the Projects section settles into view, auto-expand
-          // the mac window to fullscreen (same effect as the green button)
-          // so the work is never seen cramped by default - only once per
-          // visit, with a short delay so it doesn't collide with the
-          // section's own fade-in transition.
-          if(entry.target.id==='projects'&&!projectsAutoFullscreenDone){
-            projectsAutoFullscreenDone=true;
-            setTimeout(()=>{setFullscreen(true);showCoachMark();},500);
+          if(entry.target.id==='projects'){
+            if(!projectsAutoFullscreenDone){
+              // First time the Projects section settles into view, auto-
+              // expand the mac window to fullscreen (same effect as the
+              // green button) so the work is never seen cramped by default -
+              // only once per visit, with a short delay so it doesn't
+              // collide with the section's own fade-in transition.
+              projectsAutoFullscreenDone=true;
+              setTimeout(()=>{setFullscreen(true,true);showCoachMark();},500);
+            }else if(userWantsFullscreen&&!macContainer.classList.contains('fullscreen')){
+              // Scrolling back after having left fullscreen mid-visit (see
+              // the wheel handler) - restore it instead of always landing
+              // back in mini mode, which read as the toggle not sticking.
+              setFullscreen(true,false);
+            }
           }
         }
       });
@@ -709,8 +733,10 @@ document.addEventListener('DOMContentLoaded',()=>{
       // The mac window covers the whole viewport while fullscreen, so a
       // page-change scroll exits it first instead of silently changing
       // what section is waiting underneath (or just eating the scroll,
-      // which read as scrolling away from Projects being broken).
-      if(macContainer.classList.contains('fullscreen'))setFullscreen(false);
+      // which read as scrolling away from Projects being broken). Not
+      // persisted as a preference change - scrolling back to Projects
+      // restores fullscreen if that's genuinely what the user had chosen.
+      if(macContainer.classList.contains('fullscreen'))setFullscreen(false,false);
       scrollToIndex(currentSectionIndex+(deltaY>0?1:-1));
     }
     forwardWheelDelta=handleDelta;
