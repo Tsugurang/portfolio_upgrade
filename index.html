@@ -166,7 +166,13 @@
     .coach-mark.show { opacity: 1; transform: translateY(0); }
     .mac-body { position: relative; width: 100%; height: 100%; padding: 3rem 4rem; box-sizing: border-box; }
     .folder { position: absolute; text-align: center; user-select: none; transition: transform 0.2s ease-out; }
-    .folder img { width: 130px; filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.12)); transition: transform 0.25s ease, filter 0.25s ease; animation: floaty 3.4s ease-in-out infinite; }
+    /* height:auto is explicit (not just the default) because the img's
+       width/height HTML attributes - added so the browser reserves the
+       right box before the image bytes even arrive - also map to a
+       presentational height:182px hint that would otherwise pin the
+       rendered height and stop it following width when JS scales icons
+       down to fit more folders on the desktop. */
+    .folder img { width: 130px; height: auto; filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.12)); transition: transform 0.25s ease, filter 0.25s ease; animation: floaty 3.4s ease-in-out infinite; }
     .folder:hover img { animation-play-state: paused; transform: translateY(-6px); filter: drop-shadow(0px 12px 16px rgba(0,0,0,0.18)); }
     .folder .label { color: var(--fg-muted); font-size: 0.85rem; letter-spacing: 0.02em; margin-top: 0.6rem; }
     .tab-bar { display: flex; gap: 8px; margin-left: 20px; }
@@ -397,26 +403,48 @@ document.addEventListener('DOMContentLoaded',()=>{
       return;
     }
 
-    // Real per-folder footprint (icons aren't all the same aspect ratio -
-    // folderp.webp's source image isn't square, so at the same 130px width
-    // it renders noticeably taller than folder.webp does). The width/height
-    // attributes on each <img> reserve the right box size immediately, even
-    // before the image bytes arrive, so this measurement is accurate from
-    // the very first layout pass.
-    const sizes=[...folders].map(f=>{const r=f.getBoundingClientRect();return{w:r.width,h:r.height};});
-    const cellW=Math.max(...sizes.map(s=>s.w))+padding;
-    const cellH=Math.max(...sizes.map(s=>s.h))+padding;
+    const n=folders.length;
 
-    // A grid guarantees every folder its own non-overlapping cell. Pure
-    // random (or rejection-sampled) placement doesn't: it can fragment the
-    // desktop into gaps too small for one more icon even though the total
-    // free area left is still plenty, once enough folders are already down.
-    // Each folder then gets a random offset within its own cell so the
-    // result still reads as scattered rather than a visible grid, and which
+    // Natural per-folder footprint at the CSS-defined 130px icon width -
+    // folderp.webp's source image isn't square, so it renders taller than
+    // folder.webp does at the same width. The img width/height attributes
+    // reserve this box size immediately, before the image bytes even
+    // arrive, so the measurement is accurate from the very first layout
+    // pass. imgH/labelH are split out (rather than just using the whole
+    // folder height) because only the image actually shrinks if icons need
+    // scaling down below - the label stays a fixed size regardless.
+    const tallest=[...folders].reduce((a,b)=>a.getBoundingClientRect().height>=b.getBoundingClientRect().height?a:b);
+    const naturalImgH=tallest.querySelector('img').getBoundingClientRect().height;
+    const labelH=tallest.getBoundingClientRect().height-naturalImgH;
+    const naturalW=130;
+
+    // Search row counts for the grid that needs the least icon shrinking to
+    // fit all n folders without overlap - a smaller window (or simply more
+    // folders than the desktop has room for at full size) means the fixed
+    // 130px icon size doesn't always fit, and guessing a single fixed grid
+    // shape (e.g. "however many rows fit at full size") could force an
+    // unreasonably cramped one (all n folders in a single row) instead of a
+    // more balanced grid at a mild scale-down.
+    let best=null;
+    for(let rows=1;rows<=n;rows++){
+      const cols=Math.ceil(n/rows);
+      const scale=Math.min(1,
+        ((containerRect.width-padding)/cols-padding)/naturalW,
+        ((containerRect.height-padding)/rows-padding-labelH)/naturalImgH
+      );
+      if(!best||scale>best.scale)best={rows,cols,scale};
+    }
+    const {rows,cols,scale}=best;
+    if(scale<1)folders.forEach(folder=>{folder.querySelector('img').style.width=`${Math.max(40,naturalW*scale)}px`;});
+
+    // Each folder then gets a random offset within its own cell (stretched
+    // to fill the real available space, not just the minimum needed) so the
+    // result reads as scattered rather than a visible grid, and which
     // folder lands in which cell is shuffled too.
-    const maxRows=Math.max(1,Math.floor((containerRect.height-padding)/cellH));
-    const cols=Math.max(1,Math.ceil(folders.length/maxRows));
-    const cellOrder=[...Array(cols*maxRows).keys()];
+    const sizes=[...folders].map(f=>{const r=f.getBoundingClientRect();return{w:r.width,h:r.height};});
+    const cellW=(containerRect.width-padding)/cols;
+    const cellH=(containerRect.height-padding)/rows;
+    const cellOrder=[...Array(cols*rows).keys()];
     for(let i=cellOrder.length-1;i>0;i--){
       const j=Math.floor(Math.random()*(i+1));
       [cellOrder[i],cellOrder[j]]=[cellOrder[j],cellOrder[i]];
