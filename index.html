@@ -358,6 +358,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const sections=Array.from(document.querySelectorAll('.scroll-container > .section'));
 
   const tabs={};
+  const tabLabels={home:'Home'};
   const iframes={};
   let dotButtons=[];
   let dotsNav=null;
@@ -714,6 +715,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       });
       tab.addEventListener('click',()=>activateTab(link));
       tabBar.appendChild(tab);tabs[link]=true;
+      tabLabels[link]=label;
     }
     activateTab(link,folder);
   }
@@ -807,6 +809,12 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   function activateTab(link,originFolder){
     activeLink=link;
+    // A virtual pageview per project tab, since this is all one real
+    // document/URL - GA4's automatic per-page engagement-time tracking only
+    // works if it sees distinct page_view events, so without this every
+    // folder opened in a visit would just silently fold into the single
+    // real pageview for index.html.
+    gtag('event','page_view',{page_title:tabLabels[link]||link,page_path:'/'+link,page_location:location.origin+location.pathname+'#'+link});
     document.querySelectorAll('.tab').forEach(tab=>tab.classList.remove('active'));
     const tab=document.querySelector(`.tab[data-link="${link}"]`);if(tab)tab.classList.add('active');
     Object.values(iframes).forEach(f=>{f.style.display='none';});
