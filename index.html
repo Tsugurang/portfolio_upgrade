@@ -66,6 +66,13 @@
     @keyframes fadeUp { 0% { opacity: 0; transform: translateY(40px); } 100% { opacity: 1; transform: translateY(0); } }
     .fade-up { opacity: 0; animation: fadeUp 1s ease-out forwards; animation-delay: 0.3s; }
 
+    /* Continuously-rotating dot-matrix cube, drawn in JS (setupHeroCube).
+       Positioned in the empty right half of the Home hero. Desktop only -
+       hidden below the mobile breakpoint alongside its rAF loop, both for
+       the tight space and to not spend battery animating something that
+       small on a phone. */
+    .hero-cube { position: absolute; right: 6vw; top: 50%; transform: translateY(-50%); width: min(38vw, 440px); height: min(38vw, 440px); opacity: 0; animation: fadeUp 1.2s ease-out forwards; animation-delay: 0.5s; }
+
     /* Full custom cursor again. Everything that's actually gone wrong in
        past attempts is avoided at once: mix-blend-mode (broke against the
        Home gradient), box-shadow (can clip at the will-change GPU layer's
@@ -224,6 +231,7 @@
          a normal page section instead - one single scrollable area. */
       .section { height: auto; min-height: 100vh; }
       .about-content { max-height: none; overflow-y: visible; overscroll-behavior: auto; touch-action: auto; padding-top: 2rem; padding-bottom: 2rem; }
+      .hero-cube { display: none; }
 
       .mac-container { width: 95%; height: 85vh; }
       .mac-body { padding: 1.2rem 1rem; }
@@ -252,6 +260,7 @@
       <p style="font-size: clamp(1rem, 3vw, 1.8rem); max-width: 600px; line-height: 1.7; font-weight: 600; letter-spacing: 0.02em; color: #333;">JEONG CHAN HEE</p>
       <p style="font-size: clamp(0.75rem, 2vw, 0.9rem); margin-top: 1rem; font-weight: 500; letter-spacing: 0.01em; color: #555;">이 포트폴리오는 PC 환경에 최적화되어 있습니다.</p>
     </div>
+    <canvas id="heroCube" class="hero-cube" width="440" height="440"></canvas>
   </div>
   <div class="section" id="about">
     <div class="about-content">
@@ -403,6 +412,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   setupTextReveal();
   setupCustomCursor();
   setupEagerPreload();
+  if(!isMobile)setupHeroCube();
 
   // ---- mac-window folders: placement, drag, magnetic hover ----
   function setupFolders(){
@@ -1007,6 +1017,68 @@ document.addEventListener('DOMContentLoaded',()=>{
       cursorDot.classList.remove('hover','hover-sm');
       cursorDot.textContent='';
     });
+  }
+
+  // ---- hero centerpiece: a continuously-rotating cube drawn as dots ----
+  // No 3D library - a cube is just 8 points and 12 edges, rotated with
+  // plain rotation matrices and perspective-projected by hand. Edges are
+  // drawn as a row of small dots (interpolated in already-projected 2D
+  // screen space, which is equivalent to projecting interpolated 3D points
+  // since perspective projection preserves straight lines) rather than a
+  // stroked line, to match the halftone/dot-matrix look elsewhere on the
+  // site rather than a plain wireframe.
+  function setupHeroCube(){
+    const canvas=document.getElementById('heroCube');
+    if(!canvas)return;
+    const ctx=canvas.getContext('2d');
+    const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2;
+    const s=85;
+    const verts=[
+      [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
+      [-s,-s, s],[s,-s, s],[s,s, s],[-s,s, s]
+    ];
+    const edges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+    const dist=400,scale=1.3;
+    let ax=0.4,ay=0.6,last=performance.now();
+
+    function project([x,y,z]){
+      const cosY=Math.cos(ay),sinY=Math.sin(ay);
+      const x1=x*cosY+z*sinY,z1=-x*sinY+z*cosY;
+      const cosX=Math.cos(ax),sinX=Math.sin(ax);
+      const y1=y*cosX-z1*sinX,z2=y*sinX+z1*cosX;
+      const f=dist/(dist+z2);
+      return{x:cx+x1*f*scale,y:cy+y1*f*scale,f};
+    }
+
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      const p=verts.map(project);
+      ctx.fillStyle='#fff';
+      ctx.shadowColor='rgba(10,10,30,0.35)';
+      ctx.shadowBlur=6;
+      edges.forEach(([a,b])=>{
+        const p1=p[a],p2=p[b],steps=14;
+        for(let i=0;i<=steps;i++){
+          const t=i/steps;
+          const f=p1.f+(p2.f-p1.f)*t;
+          ctx.globalAlpha=Math.min(1,f*0.9);
+          ctx.beginPath();
+          ctx.arc(p1.x+(p2.x-p1.x)*t,p1.y+(p2.y-p1.y)*t,Math.max(1.2,f*3.2),0,Math.PI*2);
+          ctx.fill();
+        }
+      });
+      ctx.globalAlpha=1;
+    }
+
+    function tick(now){
+      const dt=(now-last)/1000;
+      last=now;
+      ay+=dt*0.5;
+      ax+=dt*0.28;
+      draw();
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
   }
 
   // ---- pre-build every work page in the background on site entry ----
